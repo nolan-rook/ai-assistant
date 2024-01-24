@@ -163,12 +163,6 @@ def handle_voiceflow_button(ack, body, client, say, logger):
     else:
         logger.error(f"Conversation not found for user: {user_id}")
 
-        else:
-            logger.error(f"Button payload not found for index: {button_index}")
-    else:
-        logger.error(f"Conversation not found for user: {user_id}")
-
-
 # Start your app
 if __name__ == "__main__":
     app.start(port=int(os.getenv("PORT", 3000)))
