@@ -17,6 +17,7 @@ bot_user_id = os.getenv("SLACK_BOT_USER_ID")
 # Install the Slack app and get xoxb- token in advance
 app = App(token=slack_bot_token,
           signing_secret=slack_signing_secret)
+
 # Initialize the Voiceflow API client
 voiceflow = VoiceflowAPI()
 
@@ -124,4 +125,4 @@ def handle_voiceflow_button(ack, body, client, say, logger):
 
 # Start your app
 if __name__ == "__main__":
-    app.start(port=int(os.getenv("PORT", 8080)))
+    app.start(port=int(os.getenv("PORT", 3000)))
