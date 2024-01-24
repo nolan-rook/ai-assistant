@@ -26,7 +26,6 @@ conversations = {}
 def create_message_blocks(text_responses, button_payloads):
     blocks = []
     summary_text = "Select an option:"  # Fallback text for notifications
-    blocks.append({"type": "divider"})
     # Add text responses as section blocks
     for text in text_responses:
         blocks.append({
@@ -36,6 +35,7 @@ def create_message_blocks(text_responses, button_payloads):
                 "text": text
             }
         })
+        blocks.append({"type": "divider"})
     blocks.append({"type": "divider"})
     # Prepare buttons with unique action_ids
     buttons = []
