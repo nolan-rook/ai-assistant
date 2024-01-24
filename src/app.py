@@ -1,5 +1,4 @@
 from slack_bolt import App
-from slack_bolt.adapter.socket_mode import SocketModeHandler
 
 from voiceflow_api import VoiceflowAPI
 
@@ -12,10 +11,12 @@ load_dotenv()
 
 slack_bot_token = os.getenv("SLACK_BOT_TOKEN")
 slack_app_token = os.getenv("SLACK_APP_TOKEN")
+slack_signing_secret = os.getenv("SLACK_SIGNING_SECRET")
 bot_user_id = os.getenv("SLACK_BOT_USER_ID") 
 
 # Install the Slack app and get xoxb- token in advance
-app = App(token=slack_bot_token)
+app = App(token=slack_bot_token,
+          signing_secret=slack_signing_secret)
 # Initialize the Voiceflow API client
 voiceflow = VoiceflowAPI()
 
@@ -121,5 +122,6 @@ def handle_voiceflow_button(ack, body, client, say, logger):
     else:
         say(text="Sorry, I couldn't find your conversation.")
 
+# Start your app
 if __name__ == "__main__":
-    SocketModeHandler(app, slack_app_token).start()
+    app.start(port=int(os.getenv("PORT", 8080)))
