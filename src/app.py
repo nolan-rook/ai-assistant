@@ -99,7 +99,6 @@ def handle_voiceflow_button(ack, body, client, say, logger):
     ack()  # Acknowledge the action
     action_id = body['actions'][0]['action_id']
     user_id = body['user']['id']
-    button_value = body['actions'][0]['value']  # The value that Voiceflow sets for the button
 
     # Log the full body payload for debugging
     logger.info(f"Received action body: {body}")
@@ -118,7 +117,7 @@ def handle_voiceflow_button(ack, body, client, say, logger):
 
         if button_payload:
             # Handle the button press with Voiceflow
-            is_running, new_button_payloads = voiceflow.handle_button_input(button_value)
+            is_running, new_button_payloads = voiceflow.handle_button_input(button_payload)
             conversations[user_id]['button_payloads'] = new_button_payloads
 
             # Generate and send new blocks to Slack
