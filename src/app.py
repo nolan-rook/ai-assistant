@@ -61,10 +61,6 @@ def create_message_blocks(text_responses, button_payloads):
 
     return blocks, summary_text
 
-
-
-
-
 @app.event("message")
 def handle_dm_events(event, say):
     # Check if the message is from the bot itself
@@ -94,14 +90,11 @@ def handle_dm_events(event, say):
         say(blocks=blocks, text=summary_text)
 
 
-@app.action(re.compile("voiceflow_button_"))  # Matches any action_id starting with 'voiceflow_button_'
+@app.action(re.compile("voiceflow_button_"))  # This will match any action_id starting with 'voiceflow_button_'
 def handle_voiceflow_button(ack, body, client, say, logger):
     ack()  # Acknowledge the action
     action_id = body['actions'][0]['action_id']
     user_id = body['user']['id']
-
-    # Log the full body payload for debugging
-    logger.info(f"Received action body: {body}")
 
     # Extract the index from the action_id (e.g., 'voiceflow_button_0' -> 0)
     button_index = int(action_id.split("_")[-1])
@@ -109,28 +102,22 @@ def handle_voiceflow_button(ack, body, client, say, logger):
     if user_id in conversations:
         # Retrieve the payload for the button pressed
         button_payloads = conversations[user_id]['button_payloads']
-        # Log the button payloads for debugging
-        logger.info(f"Button payloads: {button_payloads}")
-
         # Fetch the corresponding button payload using the index
         button_payload = button_payloads.get(str(button_index + 1))
 
         if button_payload:
-            # Handle the button press with Voiceflow
-            is_running, new_button_payloads = voiceflow.handle_button_input(button_payload)
+            # Handle the button press
+            is_running, new_button_payloads = voiceflow.handle_user_input(button_payload)
             conversations[user_id]['button_payloads'] = new_button_payloads
 
             # Generate and send new blocks to Slack
             blocks, summary_text = create_message_blocks(voiceflow.get_responses(), new_button_payloads)
             say(blocks=blocks, text=summary_text)
-            # Log the response from Voiceflow for debugging
-            logger.info(f"Voiceflow response: is_running={is_running}, new_button_payloads={new_button_payloads}")
         else:
-            logger.error(f"Button payload not found for index: {button_index}")
+            say(text="Sorry, I didn't understand that choice.")
     else:
-        logger.error(f"Conversation not found for user: {user_id}")
+        say(text="Sorry, I couldn't find your conversation.")
           
-
 # Start your app
 if __name__ == "__main__":
     app.start(port=int(os.getenv("PORT", 3000)))
