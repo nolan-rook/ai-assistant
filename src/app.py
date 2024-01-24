@@ -94,6 +94,7 @@ def handle_dm_events(event, say):
         blocks, summary_text = create_message_blocks(voiceflow.get_responses(), button_payloads)
         say(blocks=blocks, text=summary_text)
 
+
 @app.action(re.compile("voiceflow_button_"))  # Matches any action_id starting with 'voiceflow_button_'
 def handle_voiceflow_button(ack, body, client, say, logger):
     ack()  # Acknowledge the action
@@ -124,10 +125,49 @@ def handle_voiceflow_button(ack, body, client, say, logger):
             # Log the response from Voiceflow for debugging
             logger.info(f"Voiceflow response: is_running={is_running}, new_button_payloads={new_button_payloads}")
             # No message sent back to Slack, as per your previous instructions
+            @app.action(re.compile("voiceflow_button_"))  # Matches any action_id starting with 'voiceflow_button_'
+def handle_voiceflow_button(ack, body, client, say, logger):
+    ack()  # Acknowledge the action
+    action_id = body['actions'][0]['action_id']
+    user_id = body['user']['id']
+    button_value = body['actions'][0]['value']  # The value that Voiceflow sets for the button
+
+    # Log the full body payload for debugging
+    logger.info(f"Received action body: {body}")
+
+    # Extract the index from the action_id (e.g., 'voiceflow_button_0' -> 0)
+    button_index = int(action_id.split("_")[-1])
+
+    if user_id in conversations:
+        # Retrieve the payload for the button pressed
+        button_payloads = conversations[user_id]['button_payloads']
+        # Log the button payloads for debugging
+        logger.info(f"Button payloads: {button_payloads}")
+
+        # Fetch the corresponding button payload using the index
+        button_payload = button_payloads.get(str(button_index + 1))
+
+        if button_payload:
+            # Handle the button press with Voiceflow
+            is_running, new_button_payloads = voiceflow.handle_button_input(button_value)
+            conversations[user_id]['button_payloads'] = new_button_payloads
+
+            # Generate and send new blocks to Slack
+            blocks, summary_text = create_message_blocks(voiceflow.get_responses(), new_button_payloads)
+            say(blocks=blocks, text=summary_text)
+            # Log the response from Voiceflow for debugging
+            logger.info(f"Voiceflow response: is_running={is_running}, new_button_payloads={new_button_payloads}")
+            # No message sent back to Slack, as per your previous instructions
         else:
             logger.error(f"Button payload not found for index: {button_index}")
     else:
         logger.error(f"Conversation not found for user: {user_id}")
+
+        else:
+            logger.error(f"Button payload not found for index: {button_index}")
+    else:
+        logger.error(f"Conversation not found for user: {user_id}")
+
 
 # Start your app
 if __name__ == "__main__":
