@@ -73,6 +73,7 @@ def handle_dm_events(event, say):
 
         # Create a unique conversation ID using user_id and thread_ts
         conversation_id = f"{user_id}-{thread_ts}"
+        print(conversation_id)
 
         # Send a processing message
         say(text="Processing your request...", thread_ts=thread_ts)
@@ -113,7 +114,8 @@ def handle_voiceflow_button(ack, body, client, say, logger):
     ack()  # Acknowledge the action
     action_id = body['actions'][0]['action_id']
     user_id = body['user']['id']
-    thread_ts = body['message']['ts']
+    # Use 'thread_ts' if available, otherwise fall back to 'ts'
+    thread_ts = body['message'].get('thread_ts', body['message']['ts'])
 
     # Create a unique conversation ID using user_id and thread_ts
     conversation_id = f"{user_id}-{thread_ts}"
@@ -130,13 +132,15 @@ def handle_voiceflow_button(ack, body, client, say, logger):
             is_running, new_button_payloads = voiceflow.handle_user_input(conversation_id, button_payload)
             conversations[conversation_id]['button_payloads'] = new_button_payloads
 
-            # Generate and send new blocks to Slack
+            # Generate and send new blocks to Slack, ensuring to respond in the correct thread
             blocks, summary_text = create_message_blocks(voiceflow.get_responses(), new_button_payloads)
-            say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
+            say(blocks=blocks, text=summary_text, thread_ts=thread_ts)  # Ensure thread_ts is correctly used here
         else:
-            say(text="Sorry, I didn't understand that choice.")
+            # Respond in the correct thread if the choice wasn't understood
+            say(text="Sorry, I didn't understand that choice.", thread_ts=thread_ts)
     else:
-        say(text="Sorry, I couldn't find your conversation.")
+        # Respond in the correct thread if no conversation was found
+        say(text="Sorry, I couldn't find your conversation.", thread_ts=thread_ts)
           
 # Start your app
 if __name__ == "__main__":
