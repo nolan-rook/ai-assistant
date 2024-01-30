@@ -77,15 +77,15 @@ def handle_dm_events(event, say):
         combined_input = user_input
         
         files = event.get('files', [])
+        file_text = None # Initialize
 
         if files:
             for file_info in files:
-                print(file_info)
                 file_url = file_info.get('url_private_download')
                 file_type = file_info.get('filetype')
                 file_text = process_file(file_url, file_type)
+                combined_input += "\n" + file_text
                 if file_text:
-                    combined_input += "\n" + file_text
                     break
 
         if user_id in conversations:
