@@ -70,24 +70,21 @@ def handle_dm_events(event, say):
         user_id = event['user']
         user_input = event.get('text', '')
 
-        # Check if there's an ongoing conversation
         if user_id in conversations:
-            # There's an ongoing conversation, so handle the user's input
-            is_running, button_payloads = voiceflow.handle_user_input(user_input)
+            # Pass the user_id to the Voiceflow API
+            is_running, button_payloads = voiceflow.handle_user_input(user_id, user_input)
         else:
-            # This is the start of a new conversation
-            # First, send a "launch" request to start the conversation
-            is_running, button_payloads = voiceflow.handle_user_input({'type': 'launch'})
-            # Then, send the user's actual message to Voiceflow
-            if user_input.lower() != "hi":  # Check if the user input is not just a greeting to avoid double messages
-                is_running, button_payloads = voiceflow.handle_user_input(user_input)
+            # Start a new conversation
+            is_running, button_payloads = voiceflow.handle_user_input(user_id, {'type': 'launch'})
+            if user_input.lower() != "hi":
+                is_running, button_payloads = voiceflow.handle_user_input(user_id, user_input)
 
         # Store the conversation state
         conversations[user_id] = {'channel': event['channel'], 'button_payloads': button_payloads}
 
         # Generate and send new blocks to Slack
         blocks, summary_text = create_message_blocks(voiceflow.get_responses(), button_payloads)
-        say(blocks=blocks, text=summary_text)
+        say(blocks=blocks, text=summary_text) ###ADD PROCESSING YOUR REQUEST!
 
 
 @app.action(re.compile("voiceflow_button_"))  # This will match any action_id starting with 'voiceflow_button_'
@@ -107,7 +104,7 @@ def handle_voiceflow_button(ack, body, client, say, logger):
 
         if button_payload:
             # Handle the button press
-            is_running, new_button_payloads = voiceflow.handle_user_input(button_payload)
+            is_running, new_button_payloads = voiceflow.handle_user_input(user_id, button_payload)
             conversations[user_id]['button_payloads'] = new_button_payloads
 
             # Generate and send new blocks to Slack

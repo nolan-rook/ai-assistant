@@ -16,10 +16,10 @@ class VoiceflowAPI:
         self.last_message = None
         self.all_responses = []
 
-    def interact(self, request):
+    def interact(self, user_id, request):
         """Interact with the Voiceflow API and handle the response."""
         response = requests.post(
-            url=f"{self.runtime_endpoint}/state/{self.version_id}/user/{self.user_id}/interact",
+            url=f"{self.runtime_endpoint}/state/{self.version_id}/user/{user_id}/interact",
             json={'request': request},
             headers={'Authorization': self.api_key},
         )
@@ -46,15 +46,14 @@ class VoiceflowAPI:
 
         return should_continue, button_payloads
 
-    def handle_user_input(self, user_input):
+    def handle_user_input(self, user_id, user_input):
         """Handles user input by sending text or button payload to Voiceflow."""
-        # Check if the input is a dictionary, which indicates a button payload
         if isinstance(user_input, dict):
             # User input is a button payload
-            return self.interact(user_input)
+            return self.interact(user_id, user_input)
         else:
             # User input is regular text
-            return self.interact({'type': 'text', 'payload': user_input})
+            return self.interact(user_id, {'type': 'text', 'payload': user_input})
 
     def get_last_response(self):
         """Return the last message from Voiceflow."""
