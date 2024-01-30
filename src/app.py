@@ -95,7 +95,7 @@ def handle_dm_events(event, say):
                     file_text = process_file(file_url, file_type)
                     if file_text:
                         combined_input += "\n" + file_text
-
+        print(combined_input)
         # Check if there's an ongoing conversation using the unique conversation_id
         if conversation_id in conversations:
             is_running, button_payloads = voiceflow.handle_user_input(conversation_id, combined_input)
