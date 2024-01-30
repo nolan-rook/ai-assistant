@@ -11,10 +11,13 @@ def download_file(file_url):
     response = requests.get(file_url, headers=headers, allow_redirects=True)
     if response.status_code == 200:
         logging.info(f"File downloaded successfully: {file_url}")
+        logging.info(f"Response headers: {response.headers}")
+        logging.info(f"First 100 bytes of file content: {response.content[:100]}")
         return response.content
     else:
         logging.error(f"Error downloading file: {response.status_code}, {response.text}")
         return None
+
 
 def extract_text_from_pdf(file_content):
     try:
