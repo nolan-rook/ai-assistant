@@ -84,6 +84,7 @@ def handle_dm_events(event, say):
 
         # Generate and send new blocks to Slack
         blocks, summary_text = create_message_blocks(voiceflow.get_responses(), button_payloads)
+        say(text="Processing your request...", thread_ts=thread_ts)
         say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
 
 
