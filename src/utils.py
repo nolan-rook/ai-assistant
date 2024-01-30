@@ -8,7 +8,7 @@ import os
 
 def download_file(file_url):
     headers = {'Authorization': f'Bearer {os.getenv("SLACK_BOT_TOKEN")}'}
-    response = requests.get(file_url, headers=headers)
+    response = requests.get(file_url, headers=headers, allow_redirects=True)
     if response.status_code == 200:
         logging.info(f"File downloaded successfully: {file_url}")
         return response.content
