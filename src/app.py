@@ -74,18 +74,19 @@ def handle_dm_events(event, say):
         # Send a processing message
         say(text="Processing your request...", thread_ts=thread_ts)
 
-        combined_input = user_input
-        
-        files = event.get('files', [])
-        file_text = " "
+        # Process any file part of the message
+        file_input = ""
+        if 'files' in event:
+            headers = {'Authorization': f'Bearer {slack_bot_token}'}
+            for file in event['files']:
+                try:
+                    file_text = process_file(file, headers)
+                    file_input += file_text + "\n"
+                except Exception as e:
+                    say(text=f"Error processing file: {e}", thread_ts=thread_ts)
 
-        if files:
-            for file_info in files:
-                file_url = file_info.get('url_private_download')
-                file_type = file_info.get('filetype')
-                file_text = process_file(file_url, file_type)
-                if file_text:
-                    combined_input += "\n" + file_text
+        # Combine text and file inputs
+        combined_input = user_input + "\n" + file_input
 
         if user_id in conversations:
             # There's an ongoing conversation, so handle the combined input
