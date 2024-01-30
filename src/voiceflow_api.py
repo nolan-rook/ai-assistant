@@ -12,14 +12,13 @@ class VoiceflowAPI:
             raise ValueError("VOICEFLOW_API_KEY environment variable not set")
         self.runtime_endpoint = os.getenv('VOICEFLOW_RUNTIME_ENDPOINT', 'https://general-runtime.voiceflow.com')
         self.version_id = os.getenv('VOICEFLOW_VERSION_ID', 'production')
-        self.user_id = os.getenv('VOICEFLOW_USER_ID', 'default_user')
         self.last_message = None
         self.all_responses = []
 
-    def interact(self, user_id, request):
+    def interact(self, conversation_id, request):
         """Interact with the Voiceflow API and handle the response."""
         response = requests.post(
-            url=f"{self.runtime_endpoint}/state/{self.version_id}/user/{user_id}/interact",
+            url=f"{self.runtime_endpoint}/state/{self.version_id}/user/{conversation_id}/interact",
             json={'request': request},
             headers={'Authorization': self.api_key},
         )
@@ -46,14 +45,14 @@ class VoiceflowAPI:
 
         return should_continue, button_payloads
 
-    def handle_user_input(self, user_id, user_input):
+    def handle_user_input(self, conversation_id, user_input):
         """Handles user input by sending text or button payload to Voiceflow."""
         if isinstance(user_input, dict):
             # User input is a button payload
-            return self.interact(user_id, user_input)
+            return self.interact(conversation_id, user_input)
         else:
             # User input is regular text
-            return self.interact(user_id, {'type': 'text', 'payload': user_input})
+            return self.interact(conversation_id, {'type': 'text', 'payload': user_input})
 
     def get_last_response(self):
         """Return the last message from Voiceflow."""

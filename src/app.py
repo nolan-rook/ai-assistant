@@ -71,60 +71,64 @@ def handle_dm_events(event, say):
         thread_ts = event.get('ts', '')
         user_input = event.get('text', '').strip()
 
+        # Create a unique conversation ID using user_id and thread_ts
+        conversation_id = f"{user_id}-{thread_ts}"
+
         # Send a processing message
         say(text="Processing your request...", thread_ts=thread_ts)
         
         combined_input = user_input
 
         # Fetch files from the event, if any
-        files = event.get('files', [])  # This line was missing
+        files = event.get('files', [])
 
         # Process any file part of the message
         if files:
             for file_info in files:
-                file_url = file_info.get('url_private_download')  # This should be a string URL
+                file_url = file_info.get('url_private_download')
                 file_type = file_info.get('filetype')
-                if file_url:  # Ensure file_url is not None
+                if file_url:
                     file_text = process_file(file_url, file_type)
                     if file_text:
                         combined_input += "\n" + file_text
 
-        if user_id in conversations:
-            # There's an ongoing conversation, so handle the combined input
-            is_running, button_payloads = voiceflow.handle_user_input(user_id, combined_input)
+        # Check if there's an ongoing conversation using the unique conversation_id
+        if conversation_id in conversations:
+            is_running, button_payloads = voiceflow.handle_user_input(conversation_id, combined_input)
         else:
             # Start a new conversation
-            is_running, button_payloads = voiceflow.handle_user_input(user_id, {'type': 'launch'})
+            is_running, button_payloads = voiceflow.handle_user_input(conversation_id, {'type': 'launch'})
             if combined_input.lower().strip() != "hi":
-                is_running, button_payloads = voiceflow.handle_user_input(user_id, combined_input)
+                is_running, button_payloads = voiceflow.handle_user_input(conversation_id, combined_input)
 
-        # Store the conversation state
-        conversations[user_id] = {'channel': event['channel'], 'button_payloads': button_payloads}
+        # Store the conversation state using the unique conversation_id
+        conversations[conversation_id] = {'channel': event['channel'], 'button_payloads': button_payloads}
 
         # Generate and send new blocks to Slack
         blocks, summary_text = create_message_blocks(voiceflow.get_responses(), button_payloads)
         say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
         
-@app.action(re.compile("voiceflow_button_"))  # This will match any action_id starting with 'voiceflow_button_'
+@app.action(re.compile("voiceflow_button_"))
 def handle_voiceflow_button(ack, body, client, say, logger):
     ack()  # Acknowledge the action
     action_id = body['actions'][0]['action_id']
     user_id = body['user']['id']
     thread_ts = body['message']['ts']
 
-    # Extract the index from the action_id (e.g., 'voiceflow_button_0' -> 0)
+    # Create a unique conversation ID using user_id and thread_ts
+    conversation_id = f"{user_id}-{thread_ts}"
+
+    # Extract the index from the action_id
     button_index = int(action_id.split("_")[-1])
 
-    if user_id in conversations:
-        # Retrieve the payload for the button pressed
-        button_payloads = conversations[user_id]['button_payloads']
-        # Fetch the corresponding button payload using the index
+    # Check if there's an ongoing conversation using the unique conversation_id
+    if conversation_id in conversations:
+        button_payloads = conversations[conversation_id]['button_payloads']
         button_payload = button_payloads.get(str(button_index + 1))
 
         if button_payload:
-            # Handle the button press
-            is_running, new_button_payloads = voiceflow.handle_user_input(user_id, button_payload)
-            conversations[user_id]['button_payloads'] = new_button_payloads
+            is_running, new_button_payloads = voiceflow.handle_user_input(conversation_id, button_payload)
+            conversations[conversation_id]['button_payloads'] = new_button_payloads
 
             # Generate and send new blocks to Slack
             blocks, summary_text = create_message_blocks(voiceflow.get_responses(), new_button_payloads)
