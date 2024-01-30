@@ -1,6 +1,6 @@
 import logging
 from io import BytesIO
-from PyPDF2 import PdfReader
+from pdfminer.high_level import extract_text
 from docx import Document
 from pptx import Presentation
 import requests
@@ -19,12 +19,7 @@ def download_file(file_url):
 def extract_text_from_pdf(file_content):
     try:
         file_stream = BytesIO(file_content)
-        reader = PdfReader(file_stream)
-        text = ""
-        for page in reader.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text += page_text
+        text = extract_text(file_stream)
         return text
     except Exception as e:
         logging.error(f"Error extracting text from PDF: {e}")
@@ -58,12 +53,16 @@ def process_file(file_url, file_type):
     if not file_content:
         return None
 
-    if file_type == 'pdf':
-        return extract_text_from_pdf(file_content)
-    elif file_type in ['doc', 'docx']:
-        return extract_text_from_docx(file_content)
-    elif file_type in ['ppt', 'pptx']:
-        return extract_text_from_pptx(file_content)
-    else:
-        logging.error(f"Unsupported file type: {file_type}")
-        return None
+    try:
+        if file_type == 'pdf':
+            return extract_text_from_pdf(file_content)
+        elif file_type in ['doc', 'docx']:
+            return extract_text_from_docx(file_content)
+        elif file_type in ['ppt', 'pptx']:
+            return extract_text_from_pptx(file_content)
+        else:
+            logging.error(f"Unsupported file type: {file_type}")
+            return None
+    except Exception as e:
+        logging.error(f"Error processing file: {e}")
+        return "Error in processing the file."
