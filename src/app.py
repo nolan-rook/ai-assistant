@@ -69,7 +69,7 @@ def handle_dm_events(event, say):
         user_id = event['user']
         user_input = event.get('text', '')
         thread_ts = event.get('ts', '')
-
+        say(text="Processing your request...", thread_ts=thread_ts)
         if user_id in conversations:
             # Pass the user_id to the Voiceflow API
             is_running, button_payloads = voiceflow.handle_user_input(user_id, user_input)
@@ -84,7 +84,7 @@ def handle_dm_events(event, say):
 
         # Generate and send new blocks to Slack
         blocks, summary_text = create_message_blocks(voiceflow.get_responses(), button_payloads)
-        say(text="Processing your request...", thread_ts=thread_ts)
+        
         say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
 
 
