@@ -1,67 +1,69 @@
-import requests
-import io
 import logging
+from io import BytesIO
 from PyPDF2 import PdfReader
 from docx import Document
 from pptx import Presentation
+import requests
+import os
 
-# Setup basic logging
-logging.basicConfig(level=logging.INFO)
+def download_file(file_url):
+    headers = {'Authorization': f'Bearer {os.getenv("SLACK_BOT_TOKEN")}'}
+    response = requests.get(file_url, headers=headers)
+    if response.status_code == 200:
+        logging.info(f"File downloaded successfully: {file_url}")
+        return response.content
+    else:
+        logging.error(f"Error downloading file: {response.status_code}, {response.text}")
+        return None
 
-def download_file(file_url, headers):
+def extract_text_from_pdf(file_content):
     try:
-        response = requests.get(file_url, headers=headers)
-        response.raise_for_status()  # will raise an HTTPError if the HTTP request returned an unsuccessful status code
-        return io.BytesIO(response.content)
-    except requests.RequestException as e:
-        logging.error(f"Failed to download file: {e}")
-        raise
-
-def convert_pdf_to_text(file_content):
-    try:
-        reader = PdfReader(file_content)
+        file_stream = BytesIO(file_content)
+        reader = PdfReader(file_stream)
         text = ""
         for page in reader.pages:
-            if page.extract_text():
-                text += page.extract_text() + "\n"
+            page_text = page.extract_text()
+            if page_text:
+                text += page_text
         return text
     except Exception as e:
-        logging.error(f"Error processing PDF: {e}")
-        return "Error processing PDF file. It may be corrupted or incomplete."
+        logging.error(f"Error extracting text from PDF: {e}")
+        return None
 
-def convert_docx_to_text(file_content):
+def extract_text_from_docx(file_content):
     try:
-        doc = Document(file_content)
-        text = "\n".join([paragraph.text for paragraph in doc.paragraphs])
-        return text
+        file_stream = BytesIO(file_content)
+        doc = Document(file_stream)
+        return "\n".join([paragraph.text for paragraph in doc.paragraphs])
     except Exception as e:
-        logging.error(f"Error processing DOCX: {e}")
-        return "Error processing DOCX file."
+        logging.error(f"Error extracting text from DOCX: {e}")
+        return None
 
-def convert_pptx_to_text(file_content):
+def extract_text_from_pptx(file_content):
     try:
-        prs = Presentation(file_content)
-        text = ""
-        for slide in prs.slides:
+        file_stream = BytesIO(file_content)
+        ppt = Presentation(file_stream)
+        text = []
+        for slide in ppt.slides:
             for shape in slide.shapes:
                 if hasattr(shape, "text"):
-                    text += shape.text + "\n"
-        return text
+                    text.append(shape.text)
+        return "\n".join(text)
     except Exception as e:
-        logging.error(f"Error processing PPTX: {e}")
-        return "Error processing PPTX file."
+        logging.error(f"Error extracting text from PPTX: {e}")
+        return None
 
-def process_file(file, headers):
-    try:
-        file_content = download_file(file['url_private'], headers)
-        file_type = file['filetype']
-        if file_type == 'pdf':
-            return convert_pdf_to_text(file_content)
-        elif file_type == 'docx':
-            return convert_docx_to_text(file_content)
-        elif file_type == 'pptx':
-            return convert_pptx_to_text(file_content)
-    except Exception as e:
-        logging.error(f"Error processing file type '{file_type}': {e}")
-        return f"Error processing {file_type.upper()} file."
-    raise ValueError(f"Unsupported file type: {file_type}")
+def process_file(file_url, file_type):
+    file_content = download_file(file_url)
+    if not file_content:
+        return None
+
+    if file_type == 'pdf':
+        return extract_text_from_pdf(file_content)
+    elif file_type in ['doc', 'docx']:
+        return extract_text_from_docx(file_content)
+    elif file_type in ['ppt', 'pptx']:
+        return extract_text_from_pptx(file_content)
+    else:
+        logging.error(f"Unsupported file type: {file_type}")
+        return None
