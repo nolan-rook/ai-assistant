@@ -75,15 +75,18 @@ def handle_dm_events(event, say):
         say(text="Processing your request...", thread_ts=thread_ts)
 
         combined_input = user_input
+        
+        files = event.get('files', [])
 
-        if 'files' in event:
-            for file_info in event['files']:
+        if files:
+            for file_info in files:
                 print(file_info)
                 file_url = file_info.get('url_private_download')
                 file_type = file_info.get('filetype')
                 file_text = process_file(file_url, file_type)
                 if file_text:
                     combined_input += "\n" + file_text
+                    break
 
         if user_id in conversations:
             # There's an ongoing conversation, so handle the combined input
