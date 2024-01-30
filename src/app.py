@@ -10,6 +10,11 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
+import logging
+
+logging.getLogger('slack_bolt.App').setLevel(logging.ERROR)
+
+
 slack_signing_secret = os.getenv("SLACK_SIGNING_SECRET")
 slack_bot_token = os.getenv("SLACK_BOT_TOKEN")
 bot_user_id = os.getenv("SLACK_BOT_USER_ID") 
@@ -102,8 +107,6 @@ def handle_dm_events(event, say):
         else:
             # Start a new conversation
             is_running, button_payloads = voiceflow.handle_user_input(conversation_id, {'type': 'launch'})
-            if combined_input.lower().strip() != "hi":
-                is_running, button_payloads = voiceflow.handle_user_input(conversation_id, combined_input)
 
         # Store the conversation state using the unique conversation_id
         conversations[conversation_id] = {'channel': event['channel'], 'button_payloads': button_payloads}
