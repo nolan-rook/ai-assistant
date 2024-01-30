@@ -68,6 +68,7 @@ def handle_dm_events(event, say):
     if event.get('channel_type') == 'im':
         user_id = event['user']
         user_input = event.get('text', '')
+        thread_ts = event.get('ts', '')
 
         if user_id in conversations:
             # Pass the user_id to the Voiceflow API
@@ -83,7 +84,7 @@ def handle_dm_events(event, say):
 
         # Generate and send new blocks to Slack
         blocks, summary_text = create_message_blocks(voiceflow.get_responses(), button_payloads)
-        say(blocks=blocks, text=summary_text) ###ADD PROCESSING YOUR REQUEST!
+        say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
 
 
 @app.action(re.compile("voiceflow_button_"))  # This will match any action_id starting with 'voiceflow_button_'
@@ -91,6 +92,7 @@ def handle_voiceflow_button(ack, body, client, say, logger):
     ack()  # Acknowledge the action
     action_id = body['actions'][0]['action_id']
     user_id = body['user']['id']
+    thread_ts = body['message']['ts']
 
     # Extract the index from the action_id (e.g., 'voiceflow_button_0' -> 0)
     button_index = int(action_id.split("_")[-1])
@@ -108,7 +110,7 @@ def handle_voiceflow_button(ack, body, client, say, logger):
 
             # Generate and send new blocks to Slack
             blocks, summary_text = create_message_blocks(voiceflow.get_responses(), new_button_payloads)
-            say(blocks=blocks, text=summary_text)
+            say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
         else:
             say(text="Sorry, I didn't understand that choice.")
     else:
