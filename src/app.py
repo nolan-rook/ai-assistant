@@ -68,12 +68,15 @@ def handle_dm_events(event, say):
         return  # Ignore the event if it's from the bot
     if event.get('channel_type') == 'im':
         user_id = event['user']
-        thread_ts = event.get('ts', '')
+        # Check if the message is part of a thread
+        if 'thread_ts' in event:
+            thread_ts = event['thread_ts']
+        else:
+            thread_ts = event['ts']
         user_input = event.get('text', '').strip()
 
         # Create a unique conversation ID using user_id and thread_ts
         conversation_id = f"{user_id}-{thread_ts}"
-        print(conversation_id)
 
         # Send a processing message
         say(text="Processing your request...", thread_ts=thread_ts)
@@ -114,7 +117,9 @@ def handle_voiceflow_button(ack, body, client, say, logger):
     ack()  # Acknowledge the action
     action_id = body['actions'][0]['action_id']
     user_id = body['user']['id']
-    # Use 'thread_ts' if available, otherwise fall back to 'ts'
+
+    # Determine the thread timestamp
+    # Use 'thread_ts' from the message if available, otherwise fall back to 'ts' of the action
     thread_ts = body['message'].get('thread_ts', body['message']['ts'])
 
     # Create a unique conversation ID using user_id and thread_ts
@@ -134,13 +139,14 @@ def handle_voiceflow_button(ack, body, client, say, logger):
 
             # Generate and send new blocks to Slack, ensuring to respond in the correct thread
             blocks, summary_text = create_message_blocks(voiceflow.get_responses(), new_button_payloads)
-            say(blocks=blocks, text=summary_text, thread_ts=thread_ts)  # Ensure thread_ts is correctly used here
+            say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
         else:
             # Respond in the correct thread if the choice wasn't understood
             say(text="Sorry, I didn't understand that choice.", thread_ts=thread_ts)
     else:
         # Respond in the correct thread if no conversation was found
         say(text="Sorry, I couldn't find your conversation.", thread_ts=thread_ts)
+
           
 # Start your app
 if __name__ == "__main__":
