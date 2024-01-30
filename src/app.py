@@ -80,7 +80,7 @@ def handle_dm_events(event, say):
             headers = {'Authorization': f'Bearer {slack_bot_token}'}
             for file in event['files']:
                 try:
-                    file_text = process_file(file, headers)
+                    file_text = process_file(file.get('url_private_download'), headers)
                     file_input += file_text + "\n"
                 except Exception as e:
                     say(text=f"Error processing file: {e}", thread_ts=thread_ts)
