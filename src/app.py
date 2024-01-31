@@ -113,13 +113,6 @@ oauth_settings = OAuthSettings(
 
 app = App(signing_secret=os.getenv("SLACK_SIGNING_SECRET"), oauth_settings=oauth_settings)
 
-@app.route("/slack/oauth_redirect", methods=["GET"])
-def handle_oauth_redirect(request):
-    # Log the full request path
-    logger.info(f"OAuth redirect received: {request.path}")
-    # Call the built-in handler for OAuth
-    return app.oauth_handler.handle(request)
-
 # Initialize the Voiceflow API client
 voiceflow = VoiceflowAPI()
 
