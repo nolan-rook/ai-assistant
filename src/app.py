@@ -9,22 +9,32 @@ from slack_sdk.oauth.state_store import OAuthStateStore
 
 import uuid
 
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 class PostgresInstallationStore(InstallationStore):
     def __init__(self, database_url):
         self.conn = psycopg2.connect(database_url)
 
     def save(self, installation: Installation):
-        with self.conn.cursor() as cur:
-            cur.execute("""
-                INSERT INTO installations 
-                (client_id, enterprise_id, team_id, bot_token, bot_user_id) 
-                VALUES (%s, %s, %s, %s, %s) 
-                ON CONFLICT (team_id) DO UPDATE 
-                SET bot_token = EXCLUDED.bot_token, bot_user_id = EXCLUDED.bot_user_id
-                """, 
-                (installation.client_id, installation.enterprise_id, installation.team_id, installation.bot.token, installation.bot_user_id))
-            self.conn.commit()
-
+        logger.info(f"Saving installation data for team: {installation.team_id}")
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO installations 
+                    (client_id, enterprise_id, team_id, bot_token, bot_user_id) 
+                    VALUES (%s, %s, %s, %s, %s) 
+                    ON CONFLICT (team_id) DO UPDATE 
+                    SET bot_token = EXCLUDED.bot_token, bot_user_id = EXCLUDED.bot_user_id
+                    """, 
+                    (installation.client_id, installation.enterprise_id, installation.team_id, installation.bot.token, installation.bot_user_id))
+                self.conn.commit()
+                logger.info("Installation data saved successfully.")
+        except Exception as e:
+            logger.exception("Failed to save installation data.", exc_info=True)
 
     def find_installation(self, *, enterprise_id=None, team_id=None, user_id=None):
         with self.conn.cursor() as cur:
@@ -46,19 +56,28 @@ class PostgresOAuthStateStore(OAuthStateStore):
         self.conn = psycopg2.connect(database_url)
 
     def issue(self):
-        # Generate a unique state value
         state = str(uuid.uuid4())
-        with self.conn.cursor() as cur:
-            # Store the state value in the database
-            cur.execute("INSERT INTO oauth_states (state) VALUES (%s)", (state,))
-            self.conn.commit()
-        return state
+        logger.info(f"Issuing new state: {state}")
+        try:
+            with self.conn.cursor() as cur:
+                # Store the state value in the database
+                cur.execute("INSERT INTO oauth_states (state) VALUES (%s)", (state,))
+                self.conn.commit()
+                logger.info("State issued and stored successfully.")
+            return state
+        except Exception as e:
+            logger.exception("Failed to issue new state.", exc_info=True)
 
     def consume(self, state: str):
-        with self.conn.cursor() as cur:
-            # Delete the consumed state value from the database
-            cur.execute("DELETE FROM oauth_states WHERE state = %s", (state,))
-            self.conn.commit()
+        logger.info(f"Consuming state: {state}")
+        try:
+            if self.is_valid(state):
+                with self.conn.cursor() as cur:
+                    cur.execute("DELETE FROM oauth_states WHERE state = %s", (state,))
+                    self.conn.commit()
+                    logger.info("State consumed successfully.")
+        except Exception as e:
+            logger.exception("Failed to consume state.", exc_info=True)
 
     def is_valid(self, state: str):
         with self.conn.cursor() as cur:
@@ -76,14 +95,11 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-import logging
-
 logging.getLogger('slack_bolt.App').setLevel(logging.ERROR)
 
 # Instantiate custom installation and state stores
 installation_store = PostgresInstallationStore(database_url=os.getenv("DATABASE_URL"))
 state_store = PostgresOAuthStateStore(database_url=os.getenv("DATABASE_URL"))
-
 
 # OAuth settings with custom stores
 oauth_settings = OAuthSettings(
@@ -96,6 +112,13 @@ oauth_settings = OAuthSettings(
 )
 
 app = App(signing_secret=os.getenv("SLACK_SIGNING_SECRET"), oauth_settings=oauth_settings)
+
+@app.route("/slack/oauth_redirect", methods=["GET"])
+def handle_oauth_redirect(request):
+    # Log the full request path
+    logger.info(f"OAuth redirect received: {request.path}")
+    # Call the built-in handler for OAuth
+    return app.oauth_handler.handle(request)
 
 # Initialize the Voiceflow API client
 voiceflow = VoiceflowAPI()
