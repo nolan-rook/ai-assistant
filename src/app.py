@@ -1,89 +1,4 @@
 from slack_bolt import App
-from slack_bolt.oauth.oauth_settings import OAuthSettings
-
-import psycopg2
-from slack_sdk.oauth.installation_store import InstallationStore
-from slack_sdk.oauth.installation_store.models import Installation
-from slack_sdk.oauth.installation_store.models import Bot
-from slack_sdk.oauth.state_store import OAuthStateStore
-
-import uuid
-
-import logging
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-class PostgresInstallationStore(InstallationStore):
-    def __init__(self, database_url):
-        self.conn = psycopg2.connect(database_url)
-
-    def save(self, installation: Installation):
-        logger.info(f"Saving installation data for team: {installation.team_id}")
-        try:
-            with self.conn.cursor() as cur:
-                cur.execute("""
-                    INSERT INTO installations 
-                    (client_id, enterprise_id, team_id, bot_token, bot_user_id) 
-                    VALUES (%s, %s, %s, %s, %s) 
-                    ON CONFLICT (team_id) DO UPDATE 
-                    SET bot_token = EXCLUDED.bot_token, bot_user_id = EXCLUDED.bot_user_id
-                    """, 
-                    (installation.client_id, installation.enterprise_id, installation.team_id, installation.bot.token, installation.bot_user_id))
-                self.conn.commit()
-                logger.info("Installation data saved successfully.")
-        except Exception as e:
-            logger.exception("Failed to save installation data.", exc_info=True)
-
-    def find_installation(self, *, enterprise_id=None, team_id=None, user_id=None):
-        with self.conn.cursor() as cur:
-            cur.execute("SELECT bot_token, bot_user_id FROM installations WHERE team_id = %s", (team_id,))
-            row = cur.fetchone()
-            if row is not None:
-                return Installation(client_id=self.client_id, enterprise_id=enterprise_id, team_id=team_id, bot=Bot(token=row[0], bot_user_id=row[1]))
-            else:
-                return None
-    def find_bot_user_id(self, team_id):
-        with self.conn.cursor() as cur:
-            cur.execute("SELECT bot_user_id FROM installations WHERE team_id = %s", (team_id,))
-            row = cur.fetchone()
-            return row[0] if row else None
-
-
-class PostgresOAuthStateStore(OAuthStateStore):
-    def __init__(self, database_url):
-        self.conn = psycopg2.connect(database_url)
-
-    def issue(self):
-        state = str(uuid.uuid4())
-        logger.info(f"Issuing new state: {state}")
-        try:
-            with self.conn.cursor() as cur:
-                # Store the state value in the database
-                cur.execute("INSERT INTO oauth_states (state) VALUES (%s)", (state,))
-                self.conn.commit()
-                logger.info("State issued and stored successfully.")
-            return state
-        except Exception as e:
-            logger.exception("Failed to issue new state.", exc_info=True)
-
-    def consume(self, state: str):
-        logger.info(f"Consuming state: {state}")
-        try:
-            if self.is_valid(state):
-                with self.conn.cursor() as cur:
-                    cur.execute("DELETE FROM oauth_states WHERE state = %s", (state,))
-                    self.conn.commit()
-                    logger.info("State consumed successfully.")
-        except Exception as e:
-            logger.exception("Failed to consume state.", exc_info=True)
-
-    def is_valid(self, state: str):
-        with self.conn.cursor() as cur:
-            # Check if the state exists in the database
-            cur.execute("SELECT state FROM oauth_states WHERE state = %s", (state,))
-            return cur.fetchone() is not None
 
 from voiceflow_api import VoiceflowAPI
 from utils import process_file
@@ -95,23 +10,17 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
+import logging
+
 logging.getLogger('slack_bolt.App').setLevel(logging.ERROR)
 
-# Instantiate custom installation and state stores
-installation_store = PostgresInstallationStore(database_url=os.getenv("DATABASE_URL"))
-state_store = PostgresOAuthStateStore(database_url=os.getenv("DATABASE_URL"))
 
-# OAuth settings with custom stores
-oauth_settings = OAuthSettings(
-    client_id=os.getenv("SLACK_CLIENT_ID"),
-    client_secret=os.getenv("SLACK_CLIENT_SECRET"),
-    scopes=["app_mentions:read", "channels:history", "chat:write", "im:history", "im:read", "im:write", "files:read", "files:write", "mpim:history", "mpim:read", "mpim:write", "users.profile:read", "users:read"],
-    redirect_uri="https://sea-turtle-app-q8k8p.ondigitalocean.app/slack/oauth_redirect",
-    installation_store=installation_store,
-    state_store=state_store
-)
-
-app = App(signing_secret=os.getenv("SLACK_SIGNING_SECRET"), oauth_settings=oauth_settings)
+slack_signing_secret = os.getenv("SLACK_SIGNING_SECRET")
+slack_bot_token = os.getenv("SLACK_BOT_TOKEN")
+bot_user_id = os.getenv("SLACK_BOT_USER_ID") 
+# Install the Slack app and get xoxb- token in advance
+app = App(token=slack_bot_token,
+          signing_secret=slack_signing_secret)
 
 # Initialize the Voiceflow API client
 voiceflow = VoiceflowAPI()
@@ -160,8 +69,6 @@ def create_message_blocks(text_responses, button_payloads):
 @app.event("message")
 def handle_dm_events(event, say):
     # Check if the message is from the bot itself
-    team_id = event.get('team_id')
-    bot_user_id = installation_store.find_bot_user_id(team_id)
     if event.get('user') == bot_user_id:
         return  # Ignore the event if it's from the bot
     if event.get('channel_type') == 'im':
