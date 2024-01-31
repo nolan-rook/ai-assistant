@@ -14,7 +14,6 @@ import logging
 
 logging.getLogger('slack_bolt.App').setLevel(logging.ERROR)
 
-
 slack_signing_secret = os.getenv("SLACK_SIGNING_SECRET")
 slack_bot_token = os.getenv("SLACK_BOT_TOKEN")
 bot_user_id = os.getenv("SLACK_BOT_USER_ID") 
