@@ -7,6 +7,8 @@ from slack_sdk.oauth.installation_store.models import Installation
 from slack_sdk.oauth.installation_store.models import Bot
 from slack_sdk.oauth.state_store import OAuthStateStore
 
+import uuid
+
 class PostgresInstallationStore(InstallationStore):
     def __init__(self, database_url):
         self.conn = psycopg2.connect(database_url)
@@ -43,15 +45,26 @@ class PostgresOAuthStateStore(OAuthStateStore):
     def __init__(self, database_url):
         self.conn = psycopg2.connect(database_url)
 
-    def is_valid(self, state: str):
+    def issue(self):
+        # Generate a unique state value
+        state = str(uuid.uuid4())
         with self.conn.cursor() as cur:
-            cur.execute("SELECT state FROM oauth_states WHERE state = %s", (state,))
-            return cur.fetchone() is not None
-
-    def add(self, state: str):
-        with self.conn.cursor() as cur:
+            # Store the state value in the database
             cur.execute("INSERT INTO oauth_states (state) VALUES (%s)", (state,))
             self.conn.commit()
+        return state
+
+    def consume(self, state: str):
+        with self.conn.cursor() as cur:
+            # Delete the consumed state value from the database
+            cur.execute("DELETE FROM oauth_states WHERE state = %s", (state,))
+            self.conn.commit()
+
+    def is_valid(self, state: str):
+        with self.conn.cursor() as cur:
+            # Check if the state exists in the database
+            cur.execute("SELECT state FROM oauth_states WHERE state = %s", (state,))
+            return cur.fetchone() is not None
 
 from voiceflow_api import VoiceflowAPI
 from utils import process_file
