@@ -113,7 +113,57 @@ def handle_dm_events(event, say):
         # Generate and send new blocks to Slack
         blocks, summary_text = create_message_blocks(voiceflow.get_responses(), button_payloads)
         say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
-        
+
+@app.event("app_mention")
+def handle_app_mention_events(event, say):
+    # Check if the event is from the bot itself to avoid self-responses
+    if event.get('user') == bot_user_id:
+        return
+
+    user_id = event['user']
+    if 'thread_ts' in event:
+        thread_ts = event['thread_ts']
+    else:
+        thread_ts = event['ts']
+    user_input = event.get('text', '').strip().replace(f"<@{bot_user_id}>", "").strip()
+
+    # Create a unique conversation ID using user_id and thread_ts
+    conversation_id = f"{user_id}-{thread_ts}"
+    
+    # Send a processing message in the channel, replying in thread if applicable
+    say(text="On it...", thread_ts=thread_ts)
+
+    combined_input = user_input
+
+    # Process any file part of the message, if any
+    files = event.get('files', [])
+    if files:
+        for file_info in files:
+            file_url = file_info.get('url_private_download')
+            file_type = file_info.get('filetype')
+            if file_url:
+                file_text = process_file(file_url, file_type)
+                if file_text:
+                    combined_input += "\n" + file_text
+
+    print(combined_input)  # For debugging purposes
+
+    # Handle conversation with Voiceflow
+    if conversation_id in conversations:
+        is_running, button_payloads = voiceflow.handle_user_input(conversation_id, combined_input)
+    else:
+        # Start a new conversation if not already ongoing
+        is_running, button_payloads = voiceflow.handle_user_input(conversation_id, {'type': 'launch'})
+
+    # Store or update the conversation state
+    conversations[conversation_id] = {'channel': event['channel'], 'button_payloads': button_payloads}
+
+    # Generate message blocks and summary text for Slack response
+    blocks, summary_text = create_message_blocks(voiceflow.get_responses(), button_payloads)
+
+    # Respond in the channel, replying in the thread if applicable
+    say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
+
 @app.action(re.compile("voiceflow_button_"))
 def handle_voiceflow_button(ack, body, client, say, logger):
     ack()  # Acknowledge the action
