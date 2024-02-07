@@ -55,7 +55,6 @@ def process_file(file_url, file_type):
     file_content = download_file(file_url)
     if not file_content:
         return None
-
     try:
         if file_type == 'pdf':
             return extract_text_from_pdf(file_content)

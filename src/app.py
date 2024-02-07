@@ -1,4 +1,6 @@
+from flask import Flask, request, jsonify
 from slack_bolt import App
+from slack_bolt.adapter.flask import SlackRequestHandler
 
 from voiceflow_api import VoiceflowAPI
 from utils import process_file
@@ -17,9 +19,14 @@ logging.getLogger('slack_bolt.App').setLevel(logging.ERROR)
 slack_signing_secret = os.getenv("SLACK_SIGNING_SECRET")
 slack_bot_token = os.getenv("SLACK_BOT_TOKEN")
 bot_user_id = os.getenv("SLACK_BOT_USER_ID") 
+
 # Install the Slack app and get xoxb- token in advance
-app = App(token=slack_bot_token,
+bolt_app = App(token=slack_bot_token,
           signing_secret=slack_signing_secret)
+
+# Flask app to handle webhook routes
+flask_app = Flask(__name__)
+slack_handler = SlackRequestHandler(bolt_app)
 
 # Initialize the Voiceflow API client
 voiceflow = VoiceflowAPI()
@@ -65,7 +72,12 @@ def create_message_blocks(text_responses, button_payloads):
 
     return blocks, summary_text
 
-@app.event("message")
+# Route for Slack events
+@flask_app.route("/slack/events", methods=["POST"])
+def slack_events():
+    return slack_handler.handle(request)
+
+@bolt_app.event("message")
 def handle_dm_events(event, say):
     # Check if the message is from the bot itself
     if event.get('user') == bot_user_id:
@@ -108,13 +120,19 @@ def handle_dm_events(event, say):
             is_running, button_payloads = voiceflow.handle_user_input(conversation_id, {'type': 'launch'})
 
         # Store the conversation state using the unique conversation_id
-        conversations[conversation_id] = {'channel': event['channel'], 'button_payloads': button_payloads}
+        # Example of storing conversation details (adjust according to your actual logic)
+        conversations[conversation_id] = {
+            'channel': event['channel'],
+            'user_id': event['user'],
+            'thread_ts': event.get('thread_ts', event['ts']),  # Use thread_ts if available, otherwise event['ts']
+            'button_payloads': button_payloads  # Assuming you're storing something like this for handling Voiceflow interactions
+        }
 
         # Generate and send new blocks to Slack
         blocks, summary_text = create_message_blocks(voiceflow.get_responses(), button_payloads)
         say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
 
-@app.event("app_mention")
+@bolt_app.event("app_mention")
 def handle_app_mention_events(event, say):
     # Check if the event is from the bot itself to avoid self-responses
     if event.get('user') == bot_user_id:
@@ -156,7 +174,14 @@ def handle_app_mention_events(event, say):
         is_running, button_payloads = voiceflow.handle_user_input(conversation_id, {'type': 'launch'})
 
     # Store or update the conversation state
-    conversations[conversation_id] = {'channel': event['channel'], 'button_payloads': button_payloads}
+    # Example of storing conversation details (adjust according to your actual logic)
+    conversations[conversation_id] = {
+        'channel': event['channel'],
+        'user_id': event['user'],
+        'thread_ts': event.get('thread_ts', event['ts']),  # Use thread_ts if available, otherwise event['ts']
+        'button_payloads': button_payloads  # Assuming you're storing something like this for handling Voiceflow interactions
+    }
+
 
     # Generate message blocks and summary text for Slack response
     blocks, summary_text = create_message_blocks(voiceflow.get_responses(), button_payloads)
@@ -164,7 +189,7 @@ def handle_app_mention_events(event, say):
     # Respond in the channel, replying in the thread if applicable
     say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
 
-@app.action(re.compile("voiceflow_button_"))
+@bolt_app.action(re.compile("voiceflow_button_"))
 def handle_voiceflow_button(ack, body, client, say, logger):
     ack()  # Acknowledge the action
     action_id = body['actions'][0]['action_id']
@@ -198,8 +223,40 @@ def handle_voiceflow_button(ack, body, client, say, logger):
     else:
         # Respond in the correct thread if no conversation was found
         say(text="Sorry, I couldn't find your conversation.", thread_ts=thread_ts)
+        
+def notify_user_completion(conversation_id):
+    conversation_details = conversations.get(conversation_id)
+    if conversation_details:
+        channel_id = conversation_details['channel']
+        # This assumes you have stored 'user_id' when the conversation started
+        user_id = conversation_details['user_id'] 
+        thread_ts = conversation_details['thread_ts']  # The thread timestamp for replying in thread
 
+        # Construct the notification message, tagging the user
+        completion_message = f"<@{user_id}> Your request is now complete. Please check the response."
+
+        # Use the correct Bolt app instance to send the message
+        try:
+            bolt_app.client.chat_postMessage(
+                channel=channel_id, 
+                text=completion_message, 
+                thread_ts=thread_ts  # Ensure the message is sent as a reply in the thread
+            )
+        except Exception as e:
+            print(f"Error sending completion notification: {e}")
+
+# Correctly define the /task-completed endpoint within Flask app context
+@flask_app.route("/task-completed", methods=["POST"])
+def task_completed():
+    data = request.json
+    conversation_id = data.get('conversation_id')
+    if conversation_id:
+        # Assuming you implement a way to notify users, for example:
+        notify_user_completion(conversation_id)
+        return jsonify({"status": "success"}), 200
+    else:
+        return jsonify({"status": "error", "message": "Missing conversation_id"}), 400
           
 # Start your app
 if __name__ == "__main__":
-    app.start(port=int(os.getenv("PORT", 3000)))
+    flask_app.run(port=3000)
