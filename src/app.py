@@ -94,9 +94,17 @@ def handle_dm_events(event, say):
         # Create a unique conversation ID using user_id and thread_ts
         conversation_id = f"{user_id}-{thread_ts}"
 
-        # Send a processing message
-        say(text="Processing your request...", thread_ts=thread_ts)
-        
+        processing_messages = [
+            "On it!", "Sure thing!", "Got it!", "One moment...", "I'm on it!", "Absolutely!",
+            "Understood!", "Just a moment...", "Right away!", "Affirmative!", "No problem!",
+            "Okay!", "On my way!", "Certainly!", "Acknowledged!", "Will do!", "You got it!",
+            "I'm at it!", "Working on it!", "Already on it!", "On top of it!", "I've got this!",
+            "Taking care of it!", "All over it!"
+        ]
+
+        # Send a random processing message
+        say(text=random.choice(processing_messages), thread_ts=thread_ts)
+            
         combined_input = user_input
 
         # Fetch files from the event, if any
@@ -148,8 +156,16 @@ def handle_app_mention_events(event, say):
     # Create a unique conversation ID using user_id and thread_ts
     conversation_id = f"{user_id}-{thread_ts}"
     
-    # Send a processing message in the channel, replying in thread if applicable
-    say(text="On it...", thread_ts=thread_ts)
+    processing_messages = [
+        "On it!", "Sure thing!", "Got it!", "One moment...", "I'm on it!", "Absolutely!",
+        "Understood!", "Just a moment...", "Right away!", "Affirmative!", "No problem!",
+        "Okay!", "On my way!", "Certainly!", "Acknowledged!", "Will do!", "You got it!",
+        "I'm at it!", "Working on it!", "Already on it!", "On top of it!", "I've got this!",
+        "Taking care of it!", "All over it!"
+    ]
+
+    # Send a random processing message
+    say(text=random.choice(processing_messages), thread_ts=thread_ts)
 
     combined_input = user_input
 
@@ -233,7 +249,7 @@ def notify_user_completion(conversation_id):
         thread_ts = conversation_details['thread_ts']  # The thread timestamp for replying in thread
 
         # Construct the notification message, tagging the user
-        completion_message = f"<@{user_id}> Your request is now complete. Please check the response."
+        completion_message = f"Hey <@{user_id}>! 🎉 I've just finished crafting that blog post for you. Take a peek in the Google Docs folder and let us know your thoughts!"
 
         # Use the correct Bolt app instance to send the message
         try:
