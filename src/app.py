@@ -96,11 +96,7 @@ def handle_dm_events(event, say):
         conversation_id = f"{user_id}-{thread_ts}"
         
         processing_messages = [
-            "On it!", "Sure thing!", "Got it!", "One moment...", "I'm on it!", "Absolutely!",
-            "Understood!", "Just a moment...", "Right away!", "Affirmative!", "No problem!",
-            "Okay!", "On my way!", "Certainly!", "Acknowledged!", "Will do!", "You got it!",
-            "I'm at it!", "Working on it!", "Already on it!", "On top of it!", "I've got this!",
-            "Taking care of it!", "All over it!"
+            "Just a moment..."
         ]
 
         # Send a random processing message
@@ -169,11 +165,7 @@ def handle_app_mention_events(event, say):
     conversation_id = f"{user_id}-{thread_ts}"
 
     processing_messages = [
-        "On it!", "Sure thing!", "Got it!", "One moment...", "I'm on it!", "Absolutely!",
-        "Understood!", "Just a moment...", "Right away!", "Affirmative!", "No problem!",
-        "Okay!", "On my way!", "Certainly!", "Acknowledged!", "Will do!", "You got it!",
-        "I'm at it!", "Working on it!", "Already on it!", "On top of it!", "I've got this!",
-        "Taking care of it!", "All over it!"
+        "Just a moment..."
     ]
 
     # Send a random processing message
