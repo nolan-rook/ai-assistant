@@ -3,14 +3,11 @@ from slack_bolt import App
 from slack_bolt.adapter.flask import SlackRequestHandler
 
 from voiceflow_api import VoiceflowAPI
-from utils import process_file
+from utils import process_file, extract_webpage_content
 
 import re
 import os
 import random
-
-import requests
-from bs4 import BeautifulSoup
 
 # Load environment variables
 from dotenv import load_dotenv
@@ -124,8 +121,12 @@ def handle_dm_events(event, say):
         if conversation_id in conversations:
             is_running, button_payloads = voiceflow.handle_user_input(conversation_id, combined_input)
         else:
-            # Start a new conversation
+            # Start a new conversation by launching the interaction
             is_running, button_payloads = voiceflow.handle_user_input(conversation_id, {'type': 'launch'})
+            if is_running:  # Ensure the conversation was successfully launched
+                # Immediately follow up with the user's input as the next interaction
+                is_running, button_payloads = voiceflow.handle_user_input(conversation_id, combined_input)
+
 
         # Store the conversation state using the unique conversation_id
         # Example of storing conversation details (adjust according to your actual logic)
@@ -182,8 +183,11 @@ def handle_app_mention_events(event, say):
     if conversation_id in conversations:
         is_running, button_payloads = voiceflow.handle_user_input(conversation_id, combined_input)
     else:
-        # Start a new conversation if not already ongoing
+        # Start a new conversation by launching the interaction
         is_running, button_payloads = voiceflow.handle_user_input(conversation_id, {'type': 'launch'})
+        if is_running:  # Ensure the conversation was successfully launched
+            # Immediately follow up with the user's input as the next interaction
+            is_running, button_payloads = voiceflow.handle_user_input(conversation_id, combined_input)
 
     # Store or update the conversation state
     # Example of storing conversation details (adjust according to your actual logic)
