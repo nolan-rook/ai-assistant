@@ -7,6 +7,7 @@ from utils import process_file
 
 import re
 import os
+import random
 
 # Load environment variables
 from dotenv import load_dotenv
