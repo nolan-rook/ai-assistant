@@ -94,6 +94,17 @@ def handle_dm_events(event, say):
 
         # Create a unique conversation ID using user_id and thread_ts
         conversation_id = f"{user_id}-{thread_ts}"
+        
+        processing_messages = [
+            "On it!", "Sure thing!", "Got it!", "One moment...", "I'm on it!", "Absolutely!",
+            "Understood!", "Just a moment...", "Right away!", "Affirmative!", "No problem!",
+            "Okay!", "On my way!", "Certainly!", "Acknowledged!", "Will do!", "You got it!",
+            "I'm at it!", "Working on it!", "Already on it!", "On top of it!", "I've got this!",
+            "Taking care of it!", "All over it!"
+        ]
+
+        # Send a random processing message
+        say(text=random.choice(processing_messages), thread_ts=thread_ts)
             
         combined_input = user_input
 
@@ -157,6 +168,17 @@ def handle_app_mention_events(event, say):
     # Create a unique conversation ID using user_id and thread_ts
     conversation_id = f"{user_id}-{thread_ts}"
 
+    processing_messages = [
+        "On it!", "Sure thing!", "Got it!", "One moment...", "I'm on it!", "Absolutely!",
+        "Understood!", "Just a moment...", "Right away!", "Affirmative!", "No problem!",
+        "Okay!", "On my way!", "Certainly!", "Acknowledged!", "Will do!", "You got it!",
+        "I'm at it!", "Working on it!", "Already on it!", "On top of it!", "I've got this!",
+        "Taking care of it!", "All over it!"
+    ]
+
+    # Send a random processing message
+    say(text=random.choice(processing_messages), thread_ts=thread_ts)
+    
     combined_input = user_input
 
     # Process any file part of the message, if any
