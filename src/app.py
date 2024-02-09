@@ -9,6 +9,9 @@ import re
 import os
 import random
 
+import requests
+from bs4 import BeautifulSoup
+
 # Load environment variables
 from dotenv import load_dotenv
 load_dotenv()
@@ -109,7 +112,14 @@ def handle_dm_events(event, say):
                     file_text = process_file(file_url, file_type)
                     if file_text:
                         combined_input += "\n" + file_text
-        print(combined_input)
+        # Extract and append webpage content
+        urls = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', user_input)
+        for url in urls:
+            webpage_text = extract_webpage_content(url)
+            if webpage_text:
+                combined_input += "\n" + webpage_text
+
+        print(combined_input)  # For debugging
         # Check if there's an ongoing conversation using the unique conversation_id
         if conversation_id in conversations:
             is_running, button_payloads = voiceflow.handle_user_input(conversation_id, combined_input)
@@ -159,7 +169,14 @@ def handle_app_mention_events(event, say):
                 if file_text:
                     combined_input += "\n" + file_text
 
-    print(combined_input)  # For debugging purposes
+    # Extract and append webpage content
+    urls = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', user_input)
+    for url in urls:
+        webpage_text = extract_webpage_content(url)
+        if webpage_text:
+            combined_input += "\n" + webpage_text
+
+    print(combined_input)  # For debugging
 
     # Handle conversation with Voiceflow
     if conversation_id in conversations:

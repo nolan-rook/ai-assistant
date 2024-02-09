@@ -4,6 +4,7 @@ from pdfminer.high_level import extract_text
 from docx import Document
 from pptx import Presentation
 import requests
+from bs4 import BeautifulSoup
 import os
 
 def download_file(file_url):
@@ -68,3 +69,18 @@ def process_file(file_url, file_type):
     except Exception as e:
         logging.error(f"Error processing file: {e}")
         return "Error in processing the file."
+    
+# Function to extract content from a given URL
+def extract_webpage_content(url):
+    try:
+        response = requests.get(url)
+        response.raise_for_status()  # Raises an HTTPError if the status is 4xx, 5xx
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Extract text from the webpage
+        # This example extracts all paragraph texts; you might want to refine this
+        text = ' '.join(p.get_text() for p in soup.find_all('p'))
+        return text
+    except Exception as e:
+        print(f"Error fetching webpage content: {e}")
+        return None
