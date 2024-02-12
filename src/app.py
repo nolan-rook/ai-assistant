@@ -168,12 +168,18 @@ def handle_dm_events(event, say):
         return
 
     # Process messages in threads in channels where the bot was mentioned
-    # Slack sends the `thread_ts` parameter in the event for messages that are part of a thread
-    if 'thread_ts' in event and 'parent_user_id' in event:
-        # Check if bot was mentioned in the thread's starting message
-        if bot_user_id in event.get('text', ''):
+    if 'thread_ts' in event:
+        thread_ts = event['thread_ts']
+        # Retrieve the conversation details using thread_ts
+        conversation_details = conversations.get(f"{event['channel']}-{thread_ts}")
+
+        # If the conversation is ongoing in the thread, process the message
+        if conversation_details:
             process_message(event, say)
-            return
+        else:
+            # If the bot is mentioned in a new thread, process the message
+            if f"<@{bot_user_id}>" in event.get('text', ''):
+                process_message(event, say)
 
 @bolt_app.event("app_mention")
 def handle_app_mention_events(event, say):
