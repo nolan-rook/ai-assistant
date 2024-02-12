@@ -15,6 +15,8 @@ load_dotenv()
 
 import logging
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 logging.getLogger('slack_bolt.App').setLevel(logging.ERROR)
 
 slack_signing_secret = os.getenv("SLACK_SIGNING_SECRET")
@@ -100,8 +102,12 @@ def slack_events():
 
 def process_message(event, say):
     user_id = event['user']
+    channel_id = event.get('channel')
     thread_ts = event.get('thread_ts', event['ts'])
     user_input = event.get('text', '').strip()
+    
+    logging.info(f"Processing message from user {user_id} in channel {channel_id}, thread {thread_ts}")
+
     if 'app_mention' in event['type']:
         user_input = user_input.replace(f"<@{bot_user_id}>", "").strip()
 
@@ -158,19 +164,26 @@ def process_message(event, say):
 
 @bolt_app.event("message")
 def handle_message_events(event, say):
+    logging.info(f"Received message event: {event}")
+
     # Ignore messages from the bot itself to avoid loops
     if event.get('user') == bot_user_id:
+        logging.info("Message is from the bot itself; ignoring to avoid loops.")
         return
 
-    # Determine if the message is in a thread and if the bot was mentioned
-    thread_ts = event.get('thread_ts') or event.get('ts')  # Use 'ts' if 'thread_ts' is not available
-    is_threaded_message = bool(event.get('thread_ts'))
+    thread_ts = event.get('thread_ts') or event.get('ts')  # Fallback to 'ts' if 'thread_ts' is not present
     is_mention = f"<@{bot_user_id}>" in event.get('text', '')
 
-    # Process only if the bot is mentioned or if it's a follow-up in a thread the bot has participated in
-    if is_mention or (is_threaded_message and thread_ts in conversations):
-        process_message(event, say)
-
+    # Check if the message is part of a thread
+    if thread_ts:
+        # If the message is in a thread, check if it's a new mention or part of an active conversation
+        if is_mention or thread_ts in conversations:
+            logging.info(f"Processing message in thread {thread_ts}. Mention: {is_mention}")
+            process_message(event, say)
+        else:
+            logging.info(f"Message in thread {thread_ts} is not a new mention and does not match active conversations.")
+    else:
+        logging.info("Message is not in a thread or does not include a direct mention; ignoring.")
 
 @bolt_app.event("app_mention")
 def handle_app_mention_events(event, say):
