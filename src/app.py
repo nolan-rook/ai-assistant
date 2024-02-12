@@ -38,16 +38,36 @@ conversations = {}
 def create_message_blocks(text_responses, button_payloads):
     blocks = []
     summary_text = "Select an option:"  # Fallback text for notifications
+    max_chars = 3000  # Maximum characters for a block of text
+
+    # Function to split text into chunks of max_chars
+    def split_text(text, max_length):
+        for start in range(0, len(text), max_length):
+            yield text[start:start + max_length]
+
     # Add text responses as section blocks
     for text in text_responses:
-        blocks.append({"type": "divider"})
-        blocks.append({
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": text
-            }
-        })
+        if len(text) <= max_chars:
+            blocks.append({"type": "divider"})
+            blocks.append({
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": text
+                }
+            })
+        else:
+            # Split text into chunks and add each as a separate block
+            for chunk in split_text(text, max_chars):
+                blocks.append({"type": "divider"})
+                blocks.append({
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": chunk
+                    }
+                })
+
     blocks.append({"type": "divider"})
     # Prepare buttons with unique action_ids
     buttons = []
