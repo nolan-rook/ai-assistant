@@ -157,29 +157,32 @@ def process_message(event, say):
     say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
 
 @bolt_app.event("message")
-def handle_dm_events(event, say):
+def handle_dm_events(event, say, client):
     # Check if the message is from the bot itself to avoid self-reply loops
     if event.get('user') == bot_user_id:
         return
-    
+
     # Process direct messages
     if event.get('channel_type') == 'im':
         process_message(event, say)
         return
 
-    # Process messages in threads in channels where the bot was mentioned
+    # Process messages in threads in channels
     if 'thread_ts' in event:
         thread_ts = event['thread_ts']
-        # Retrieve the conversation details using thread_ts
-        conversation_details = conversations.get(f"{event['channel']}-{thread_ts}")
+        channel_id = event['channel']
 
-        # If the conversation is ongoing in the thread, process the message
-        if conversation_details:
+        # Fetch the thread's starting message to check if the bot was mentioned
+        result = client.conversations_replies(
+            channel=channel_id,
+            ts=thread_ts
+        )
+
+        # Check if the bot was mentioned in the thread's starting message
+        thread_starting_message = result['messages'][0]['text'] if result['messages'] else ''
+        if f"<@{bot_user_id}>" in thread_starting_message:
             process_message(event, say)
-        else:
-            # If the bot is mentioned in a new thread, process the message
-            if f"<@{bot_user_id}>" in event.get('text', ''):
-                process_message(event, say)
+
 
 @bolt_app.event("app_mention")
 def handle_app_mention_events(event, say):
