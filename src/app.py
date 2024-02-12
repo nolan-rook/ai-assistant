@@ -128,9 +128,11 @@ def process_message(event, say):
                 file_text = process_file(file_url, file_type)
                 if file_text:
                     combined_input += "\n" + file_text
-    # Extract and append webpage content
-    urls = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+[^>),\s]*', user_input)
+    # Extract URLs and remove the enclosing angle brackets
+    urls = re.findall(r'<http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+[^>),\s]*>', user_input)
     for url in urls:
+        # Remove the angle brackets from each URL
+        url = url[1:-1]
         webpage_text = extract_webpage_content(url)
         if webpage_text:
             combined_input += "\n" + webpage_text
