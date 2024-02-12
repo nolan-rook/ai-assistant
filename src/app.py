@@ -158,9 +158,22 @@ def process_message(event, say):
 
 @bolt_app.event("message")
 def handle_dm_events(event, say):
-    if event.get('user') == bot_user_id or event.get('channel_type') != 'im':
+    # Check if the message is from the bot itself to avoid self-reply loops
+    if event.get('user') == bot_user_id:
         return
-    process_message(event, say)
+    
+    # Process direct messages
+    if event.get('channel_type') == 'im':
+        process_message(event, say)
+        return
+
+    # Process messages in threads in channels where the bot was mentioned
+    # Slack sends the `thread_ts` parameter in the event for messages that are part of a thread
+    if 'thread_ts' in event and 'parent_user_id' in event:
+        # Check if bot was mentioned in the thread's starting message
+        if bot_user_id in event.get('text', ''):
+            process_message(event, say)
+            return
 
 @bolt_app.event("app_mention")
 def handle_app_mention_events(event, say):
