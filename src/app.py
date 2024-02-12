@@ -98,92 +98,15 @@ def create_message_blocks(text_responses, button_payloads):
 def slack_events():
     return slack_handler.handle(request)
 
-@bolt_app.event("message")
-def handle_dm_events(event, say):
-    # Check if the message is from the bot itself
-    if event.get('user') == bot_user_id:
-        return  # Ignore the event if it's from the bot
-    if event.get('channel_type') == 'im':
-        user_id = event['user']
-        # Check if the message is part of a thread
-        if 'thread_ts' in event:
-            thread_ts = event['thread_ts']
-        else:
-            thread_ts = event['ts']
-        user_input = event.get('text', '').strip()
-
-        # Create a unique conversation ID using user_id and thread_ts
-        conversation_id = f"{user_id}-{thread_ts}"
-        
-        processing_messages = [
-            "Just a moment..."
-        ]
-
-        # Send a random processing message
-        say(text=random.choice(processing_messages), thread_ts=thread_ts)
-            
-        combined_input = user_input
-
-        # Fetch files from the event, if any
-        files = event.get('files', [])
-
-        # Process any file part of the message
-        if files:
-            for file_info in files:
-                file_url = file_info.get('url_private_download')
-                file_type = file_info.get('filetype')
-                if file_url:
-                    file_text = process_file(file_url, file_type)
-                    if file_text:
-                        combined_input += "\n" + file_text
-        # Extract and append webpage content
-        urls = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', user_input)
-        for url in urls:
-            webpage_text = extract_webpage_content(url)
-            if webpage_text:
-                combined_input += "\n" + webpage_text
-
-        print(combined_input)  # For debugging
-        # Check if there's an ongoing conversation using the unique conversation_id
-        if conversation_id in conversations:
-            is_running, button_payloads = voiceflow.handle_user_input(conversation_id, combined_input)
-        else:
-            # Start a new conversation by launching the interaction
-            is_running, button_payloads = voiceflow.handle_user_input(conversation_id, {'type': 'launch'})
-            if is_running:  # Ensure the conversation was successfully launched
-                # Immediately follow up with the user's input as the next interaction
-                is_running, button_payloads = voiceflow.handle_user_input(conversation_id, combined_input)
-
-
-        # Store the conversation state using the unique conversation_id
-        # Example of storing conversation details (adjust according to your actual logic)
-        conversations[conversation_id] = {
-            'channel': event['channel'],
-            'user_id': event['user'],
-            'thread_ts': event.get('thread_ts', event['ts']),  # Use thread_ts if available, otherwise event['ts']
-            'button_payloads': button_payloads  # Assuming you're storing something like this for handling Voiceflow interactions
-        }
-
-        # Generate and send new blocks to Slack
-        blocks, summary_text = create_message_blocks(voiceflow.get_responses(), button_payloads)
-        say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
-
-@bolt_app.event("app_mention")
-def handle_app_mention_events(event, say):
-    # Check if the event is from the bot itself to avoid self-responses
-    if event.get('user') == bot_user_id:
-        return
-
+def process_message(event, say):
     user_id = event['user']
-    if 'thread_ts' in event:
-        thread_ts = event['thread_ts']
-    else:
-        thread_ts = event['ts']
-    user_input = event.get('text', '').strip().replace(f"<@{bot_user_id}>", "").strip()
+    thread_ts = event.get('thread_ts', event['ts'])
+    user_input = event.get('text', '').strip()
+    if 'app_mention' in event['type']:
+        user_input = user_input.replace(f"<@{bot_user_id}>", "").strip()
 
-    # Create a unique conversation ID using user_id and thread_ts
     conversation_id = f"{user_id}-{thread_ts}"
-
+    
     processing_messages = [
         "Just a moment..."
     ]
@@ -193,8 +116,10 @@ def handle_app_mention_events(event, say):
     
     combined_input = user_input
 
-    # Process any file part of the message, if any
+    # Fetch files from the event, if any
     files = event.get('files', [])
+
+    # Process any file part of the message
     if files:
         for file_info in files:
             file_url = file_info.get('url_private_download')
@@ -203,7 +128,6 @@ def handle_app_mention_events(event, say):
                 file_text = process_file(file_url, file_type)
                 if file_text:
                     combined_input += "\n" + file_text
-
     # Extract and append webpage content
     urls = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', user_input)
     for url in urls:
@@ -212,32 +136,35 @@ def handle_app_mention_events(event, say):
             combined_input += "\n" + webpage_text
 
     print(combined_input)  # For debugging
-
-    # Handle conversation with Voiceflow
+    
     if conversation_id in conversations:
         is_running, button_payloads = voiceflow.handle_user_input(conversation_id, combined_input)
     else:
-        # Start a new conversation by launching the interaction
         is_running, button_payloads = voiceflow.handle_user_input(conversation_id, {'type': 'launch'})
-        if is_running:  # Ensure the conversation was successfully launched
-            # Immediately follow up with the user's input as the next interaction
+        if is_running:
             is_running, button_payloads = voiceflow.handle_user_input(conversation_id, combined_input)
 
-    # Store or update the conversation state
-    # Example of storing conversation details (adjust according to your actual logic)
     conversations[conversation_id] = {
         'channel': event['channel'],
-        'user_id': event['user'],
-        'thread_ts': event.get('thread_ts', event['ts']),  # Use thread_ts if available, otherwise event['ts']
-        'button_payloads': button_payloads  # Assuming you're storing something like this for handling Voiceflow interactions
+        'user_id': user_id,
+        'thread_ts': thread_ts,
+        'button_payloads': button_payloads
     }
 
-
-    # Generate message blocks and summary text for Slack response
     blocks, summary_text = create_message_blocks(voiceflow.get_responses(), button_payloads)
-
-    # Respond in the channel, replying in the thread if applicable
     say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
+
+@bolt_app.event("message")
+def handle_dm_events(event, say):
+    if event.get('user') == bot_user_id or event.get('channel_type') != 'im':
+        return
+    process_message(event, say)
+
+@bolt_app.event("app_mention")
+def handle_app_mention_events(event, say):
+    if event.get('user') == bot_user_id:
+        return
+    process_message(event, say)
 
 @bolt_app.action(re.compile("voiceflow_button_"))
 def handle_voiceflow_button(ack, body, client, say, logger):
