@@ -23,6 +23,8 @@ slack_signing_secret = os.getenv("SLACK_SIGNING_SECRET")
 slack_bot_token = os.getenv("SLACK_BOT_TOKEN")
 bot_user_id = os.getenv("SLACK_BOT_USER_ID") 
 
+logging.info(f"Bot User ID from environment: {bot_user_id}")
+
 # Install the Slack app and get xoxb- token in advance
 bolt_app = App(token=slack_bot_token,
           signing_secret=slack_signing_secret)
@@ -162,34 +164,35 @@ def process_message(event, say):
     blocks, summary_text = create_message_blocks(voiceflow.get_responses(), button_payloads)
     say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
 
-@bolt_app.event("message")
-def handle_message_events(event, say):
-    logging.info(f"Received message event: {event}")
-
-    # Ignore messages from the bot itself to avoid loops
-    if event.get('user') == bot_user_id:
-        logging.info("Message is from the bot itself; ignoring to avoid loops.")
-        return
-
-    thread_ts = event.get('thread_ts') or event.get('ts')  # Fallback to 'ts' if 'thread_ts' is not present
-    is_mention = f"<@{bot_user_id}>" in event.get('text', '')
-
-    # Check if the message is part of a thread
-    if thread_ts:
-        # If the message is in a thread, check if it's a new mention or part of an active conversation
-        if is_mention or thread_ts in conversations:
-            logging.info(f"Processing message in thread {thread_ts}. Mention: {is_mention}")
-            process_message(event, say)
-        else:
-            logging.info(f"Message in thread {thread_ts} is not a new mention and does not match active conversations.")
-    else:
-        logging.info("Message is not in a thread or does not include a direct mention; ignoring.")
-
 @bolt_app.event("app_mention")
 def handle_app_mention_events(event, say):
     if event.get('user') == bot_user_id:
         return
+
+    # Extract thread_ts to track the conversation; fall back to message ts if not in a thread
+    thread_ts = event.get('thread_ts', event['ts'])
+    channel_id = event['channel']
+
+    # Mark this thread as an active conversation the bot is participating in
+    conversations[thread_ts] = {'channel_id': channel_id, 'thread_ts': thread_ts}
+
+    # Process the mention message
     process_message(event, say)
+
+@bolt_app.event("message")
+def handle_message_events(event, say):
+    # Ignore messages from the bot itself to avoid loops
+    if event.get('user') == bot_user_id:
+        return
+
+    # Extract the necessary identifiers from the event
+    thread_ts = event.get('thread_ts', event.get('ts'))
+    is_threaded = bool(event.get('thread_ts'))
+
+    # Check if the message is part of a thread that the bot is involved in
+    if is_threaded and thread_ts in conversations:
+        # Process the message as part of the ongoing conversation
+        process_message(event, say)
 
 @bolt_app.action(re.compile("voiceflow_button_"))
 def handle_voiceflow_button(ack, body, client, say, logger):
