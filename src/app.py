@@ -184,6 +184,9 @@ def handle_message_events(event, say):
     # Ignore messages from the bot itself to avoid loops
     if event.get('user') == bot_user_id:
         return
+    
+    if event.get('channel_type') == 'im':
+        process_message(event, say)
 
     # Extract the necessary identifiers from the event
     thread_ts = event.get('thread_ts', event.get('ts'))
