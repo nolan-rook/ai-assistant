@@ -224,11 +224,15 @@ def handle_voiceflow_button(ack, body, client, say, logger):
 
             # Remove the buttons after processing
             try:
-                # Use chat.update to modify the original message, removing action blocks
+                # Retrieve the original blocks and filter out action blocks
+                original_blocks = body['message'].get('blocks', [])
+                updated_blocks = [block for block in original_blocks if block['type'] != 'actions']
+
+                # Use chat.update to modify the original message, keeping the text and removing the buttons
                 client.chat_update(
                     channel=channel_id,
                     ts=message_ts,
-                    blocks=[]  # Provide the updated blocks without buttons
+                    blocks=updated_blocks
                 )
             except Exception as e:
                 logger.error(f"Failed to update message: {e}")
