@@ -202,9 +202,10 @@ def handle_voiceflow_button(ack, body, client, say, logger):
     ack()  # Acknowledge the action
     action_id = body['actions'][0]['action_id']
     user_id = body['user']['id']
+    channel_id = body['channel']['id']
+    message_ts = body['message']['ts']  # Timestamp of the original message
 
     # Determine the thread timestamp
-    # Use 'thread_ts' from the message if available, otherwise fall back to 'ts' of the action
     thread_ts = body['message'].get('thread_ts', body['message']['ts'])
 
     # Create a unique conversation ID using user_id and thread_ts
@@ -213,7 +214,6 @@ def handle_voiceflow_button(ack, body, client, say, logger):
     # Extract the index from the action_id
     button_index = int(action_id.split("_")[-1])
 
-    # Check if there's an ongoing conversation using the unique conversation_id
     if conversation_id in conversations:
         button_payloads = conversations[conversation_id]['button_payloads']
         button_payload = button_payloads.get(str(button_index + 1))
@@ -222,9 +222,16 @@ def handle_voiceflow_button(ack, body, client, say, logger):
             is_running, new_button_payloads = voiceflow.handle_user_input(conversation_id, button_payload)
             conversations[conversation_id]['button_payloads'] = new_button_payloads
 
-            # Generate and send new blocks to Slack, ensuring to respond in the correct thread
-            blocks, summary_text = create_message_blocks(voiceflow.get_responses(), new_button_payloads)
-            say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
+            # Remove the buttons after processing
+            try:
+                # Use chat.update to modify the original message, removing action blocks
+                client.chat_update(
+                    channel=channel_id,
+                    ts=message_ts,
+                    blocks=[]  # Provide the updated blocks without buttons
+                )
+            except Exception as e:
+                logger.error(f"Failed to update message: {e}")
         else:
             # Respond in the correct thread if the choice wasn't understood
             say(text="Sorry, I didn't understand that choice.", thread_ts=thread_ts)
