@@ -236,6 +236,9 @@ def handle_voiceflow_button(ack, body, client, say, logger):
                 )
             except Exception as e:
                 logger.error(f"Failed to update message: {e}")
+            if is_running:
+                blocks, summary_text = create_message_blocks(voiceflow.get_responses(), new_button_payloads)
+                say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
         else:
             # Respond in the correct thread if the choice wasn't understood
             say(text="Sorry, I didn't understand that choice.", thread_ts=thread_ts)
