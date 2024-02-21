@@ -11,7 +11,7 @@ class VoiceflowAPI:
         if self.api_key is None:
             raise ValueError("VOICEFLOW_API_KEY environment variable not set")
         self.runtime_endpoint = os.getenv('VOICEFLOW_RUNTIME_ENDPOINT', 'https://general-runtime.voiceflow.com')
-        self.version_id = os.getenv('VOICEFLOW_VERSION_ID', 'production')
+        self.version_id = os.getenv('production')
         self.last_message = None
         self.all_responses = []
 
