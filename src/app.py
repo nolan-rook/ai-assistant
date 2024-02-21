@@ -217,7 +217,7 @@ def handle_voiceflow_button(ack, body, client, say, logger):
         button_payload = button_payloads.get(str(button_index + 1))
         print(button_payload)
         # Detect if this is the "Blog posts" action
-        if "Blog posts" in button_payload:  # Adjust this condition based on your identifier
+        if button_payload['payload']['label'] == "Blog posts":
             trigger_id = body['trigger_id']
             # Define the modal content here
             modal = {
