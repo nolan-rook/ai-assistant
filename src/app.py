@@ -205,6 +205,29 @@ def handle_voiceflow_button(ack, body, client, say, logger):
     channel_id = body['channel']['id']
     message_ts = body['message']['ts']  # Timestamp of the original message
     thread_ts = body['message'].get('thread_ts', body['message']['ts'])
+    
+    # Detect if this is the "Blog posts" action
+    if "blog_posts" in action_id:  # Adjust this condition based on your identifier
+        trigger_id = body['trigger_id']
+        # Define the modal content here
+        modal = {
+            "type": "modal",
+            "callback_id": "blog_posts_modal",
+            "title": {"type": "plain_text", "text": "Blog Posts"},
+            "blocks": [
+                {
+                    "type": "input",
+                    "block_id": "blog_input",
+                    "element": {"type": "plain_text_input", "action_id": "blog_text", "multiline": True},
+                    "label": {"type": "plain_text", "text": "Enter blog content"}
+                }
+            ],
+            "submit": {"type": "plain_text", "text": "Submit"}
+        }
+        # Open the modal
+        client.views_open(trigger_id=trigger_id, view=modal)
+        return  # Exit the function to prevent further processing for blog posts action
+
 
     # Create a unique conversation ID using user_id and thread_ts
     conversation_id = f"{user_id}-{thread_ts}"
@@ -245,6 +268,30 @@ def handle_voiceflow_button(ack, body, client, say, logger):
         # Respond in the correct thread if no conversation was found
         client.chat_postMessage(channel=channel_id, text="Sorry, I couldn't find your conversation.", thread_ts=thread_ts)
 
+@bolt_app.view("blog_posts_modal")
+def handle_modal_submission(ack, body, view, client):
+    ack()
+    # Extract the input data
+    blog_content = view['state']['values']['blog_input']['blog_text']['value']
+    # Here you can process the blog content, for example, saving it to a database or posting somewhere
+
+    # Assuming you have the user's ID and the channel ID you want to post the confirmation to
+    user_id = body['user']['id']
+    # Optionally, you can use a specific channel ID if you want the confirmation to be public
+    # channel_id = 'C1234567890' # Example channel ID
+
+    # Construct the confirmation message
+    confirmation_message = "Thank you for submitting your blog post. We've received it and are processing your request."
+
+    # Send the confirmation message to the user
+    try:
+        client.chat_postMessage(
+            channel=user_id, # Direct message to the user
+            # For public confirmation, use 'channel=channel_id' instead of 'channel=user_id'
+            text=confirmation_message
+        )
+    except Exception as e:
+        print(f"Error sending confirmation message: {e}")
         
 def notify_user_completion(conversation_id):
     conversation_details = conversations.get(conversation_id)
