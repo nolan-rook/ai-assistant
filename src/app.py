@@ -201,34 +201,10 @@ def handle_message_events(event, say):
 def handle_voiceflow_button(ack, body, client, say, logger):
     ack()  # Acknowledge the action
     action_id = body['actions'][0]['action_id']
-    print(action_id)
     user_id = body['user']['id']
     channel_id = body['channel']['id']
     message_ts = body['message']['ts']  # Timestamp of the original message
     thread_ts = body['message'].get('thread_ts', body['message']['ts'])
-    
-    # Detect if this is the "Blog posts" action
-    if "blog_posts" in action_id:  # Adjust this condition based on your identifier
-        trigger_id = body['trigger_id']
-        # Define the modal content here
-        modal = {
-            "type": "modal",
-            "callback_id": "blog_posts_modal",
-            "title": {"type": "plain_text", "text": "Blog Posts"},
-            "blocks": [
-                {
-                    "type": "input",
-                    "block_id": "blog_input",
-                    "element": {"type": "plain_text_input", "action_id": "blog_text", "multiline": True},
-                    "label": {"type": "plain_text", "text": "Enter blog content"}
-                }
-            ],
-            "submit": {"type": "plain_text", "text": "Submit"}
-        }
-        # Open the modal
-        client.views_open(trigger_id=trigger_id, view=modal)
-        return  # Exit the function to prevent further processing for blog posts action
-
 
     # Create a unique conversation ID using user_id and thread_ts
     conversation_id = f"{user_id}-{thread_ts}"
@@ -239,6 +215,28 @@ def handle_voiceflow_button(ack, body, client, say, logger):
     if conversation_id in conversations:
         button_payloads = conversations[conversation_id]['button_payloads']
         button_payload = button_payloads.get(str(button_index + 1))
+        print(button_payload)
+        # Detect if this is the "Blog posts" action
+        if "Blog posts" in button_payload:  # Adjust this condition based on your identifier
+            trigger_id = body['trigger_id']
+            # Define the modal content here
+            modal = {
+                "type": "modal",
+                "callback_id": "blog_posts_modal",
+                "title": {"type": "plain_text", "text": "Blog Posts"},
+                "blocks": [
+                    {
+                        "type": "input",
+                        "block_id": "blog_input",
+                        "element": {"type": "plain_text_input", "action_id": "blog_text", "multiline": True},
+                        "label": {"type": "plain_text", "text": "Enter blog content"}
+                    }
+                ],
+                "submit": {"type": "plain_text", "text": "Submit"}
+            }
+            # Open the modal
+            client.views_open(trigger_id=trigger_id, view=modal)
+            return  # Exit the function to prevent further processing for blog posts action
 
         if button_payload:
             # Process the button action to advance the conversation
