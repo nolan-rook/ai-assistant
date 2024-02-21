@@ -201,6 +201,7 @@ def handle_message_events(event, say):
 def handle_voiceflow_button(ack, body, client, say, logger):
     ack()  # Acknowledge the action
     action_id = body['actions'][0]['action_id']
+    print(action_id)
     user_id = body['user']['id']
     channel_id = body['channel']['id']
     message_ts = body['message']['ts']  # Timestamp of the original message
