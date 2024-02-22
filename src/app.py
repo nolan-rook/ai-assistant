@@ -111,7 +111,7 @@ def process_message(event, say):
     logging.info(f"Processing message from user {user_id} in channel {channel_id}, thread {thread_ts}")
 
     if 'app_mention' in event['type']:
-        user_input = user_input.replace(f"<@{bot_user_id}>", "").strip()
+        user_input = re.sub(r"<@U[A-Z0-9]+>", "", user_input, count=1).strip()
 
     conversation_id = f"{user_id}-{thread_ts}"
     
