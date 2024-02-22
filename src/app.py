@@ -215,28 +215,28 @@ def handle_voiceflow_button(ack, body, client, say, logger):
     if conversation_id in conversations:
         button_payloads = conversations[conversation_id]['button_payloads']
         button_payload = button_payloads.get(str(button_index + 1))
-        print(button_payload)
-        # Detect if this is the "Blog posts" action
-        if button_payload['payload']['label'] == "Blog posts":
-            trigger_id = body['trigger_id']
-            # Define the modal content here
-            modal = {
-                "type": "modal",
-                "callback_id": "blog_posts_modal",
-                "title": {"type": "plain_text", "text": "Blog Posts"},
-                "blocks": [
-                    {
-                        "type": "input",
-                        "block_id": "blog_input",
-                        "element": {"type": "plain_text_input", "action_id": "blog_text", "multiline": True},
-                        "label": {"type": "plain_text", "text": "Enter blog content"}
-                    }
-                ],
-                "submit": {"type": "plain_text", "text": "Submit"}
-            }
-            # Open the modal
-            client.views_open(trigger_id=trigger_id, view=modal)
-            return  # Exit the function to prevent further processing for blog posts action
+        # print(button_payload)
+        # # Detect if this is the "Blog posts" action
+        # if button_payload['payload']['label'] == "Blog posts":
+        #     trigger_id = body['trigger_id']
+        #     # Define the modal content here
+        #     modal = {
+        #         "type": "modal",
+        #         "callback_id": "blog_posts_modal",
+        #         "title": {"type": "plain_text", "text": "Blog Posts"},
+        #         "blocks": [
+        #             {
+        #                 "type": "input",
+        #                 "block_id": "blog_input",
+        #                 "element": {"type": "plain_text_input", "action_id": "blog_text", "multiline": True},
+        #                 "label": {"type": "plain_text", "text": "Enter blog content"}
+        #             }
+        #         ],
+        #         "submit": {"type": "plain_text", "text": "Submit"}
+        #     }
+        #     # Open the modal
+        #     client.views_open(trigger_id=trigger_id, view=modal)
+        #     return  # Exit the function to prevent further processing for blog posts action
 
         if button_payload:
             # Process the button action to advance the conversation
