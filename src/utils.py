@@ -5,6 +5,7 @@ from docx import Document
 from pptx import Presentation
 import requests
 from bs4 import BeautifulSoup
+import re
 import os
 
 def download_file(file_url):
@@ -70,17 +71,35 @@ def process_file(file_url, file_type):
         logging.error(f"Error processing file: {e}")
         return "Error in processing the file."
     
-# Function to extract content from a given URL
+# Function to extract and parse content from a given URL
 def extract_webpage_content(url):
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Referer': 'https://www.google.com/'
+    }
     try:
-        response = requests.get(url)
-        response.raise_for_status()  # Raises an HTTPError if the status is 4xx, 5xx
-        soup = BeautifulSoup(response.text, 'html.parser')
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()  # Raises an HTTPError for bad responses
+        soup = BeautifulSoup(response.content, 'html.parser')
         
-        # Extract text from the webpage
-        # This example extracts all paragraph texts; you might want to refine this
-        text = ' '.join(p.get_text() for p in soup.find_all('p'))
-        return text
+        # Initialize an empty list to hold tuples of (tag name, text)
+        content_list = []
+        for tag in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
+            tag_text = tag.get_text(separator=" ", strip=True)
+            clean_text = re.sub(r'\s+', ' ', tag_text).strip()
+            if clean_text:  # Ensure the text is not empty
+                content_list.append((tag.name, clean_text))
+        
+        # Join the texts and calculate the length
+        full_text = ' '.join([text for _, text in content_list])
+        content_length = len(full_text)
+        
+        return full_text
+    except requests.HTTPError as http_err:
+        print(f"HTTP error occurred while fetching content from {url}: {http_err}")
+        return "", 0
     except Exception as e:
-        print(f"Error fetching webpage content: {e}")
-        return None
+        print(f"An error occurred while fetching content from {url}: {e}")
+        return "", 0
