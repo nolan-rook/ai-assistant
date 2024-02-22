@@ -96,7 +96,7 @@ def extract_webpage_content(url):
         full_text = ' '.join([text for _, text in content_list])
         content_length = len(full_text)
         
-        return full_text, content_length
+        return full_text
     except requests.HTTPError as http_err:
         print(f"HTTP error occurred while fetching content from {url}: {http_err}")
         return "", 0
