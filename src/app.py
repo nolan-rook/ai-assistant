@@ -103,7 +103,7 @@ def slack_events():
     return slack_handler.handle(request)
 
 def process_message(event, say):
-    user_id = event['user']
+    user_id = event.get('user')
     channel_id = event.get('channel')
     thread_ts = event.get('thread_ts', event['ts'])
     user_input = event.get('text', '').strip()
