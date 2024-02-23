@@ -113,7 +113,9 @@ def process_message(event, say):
     if 'app_mention' in event['type']:
         user_input = re.sub(r"<@U[A-Z0-9]+>", "", user_input, count=1).strip()
 
-    conversation_id = f"con-{thread_ts}"
+    conversation_id = f"{channel_id}-{thread_ts}"
+    
+    logging.info(f"Processing in conversation {conversation_id}")
     
     processing_messages = [
         "Just a moment..."
@@ -162,10 +164,12 @@ def process_message(event, say):
     }
 
     blocks, summary_text = create_message_blocks(voiceflow.get_responses(), button_payloads)
+    logging.info(f"Sending blocks: {blocks}, summary_text: {summary_text}, thread_ts: {thread_ts}")
     say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
 
 @bolt_app.event("app_mention")
 def handle_app_mention_events(event, say):
+    logging.info(f"Received app_mention event: {event}")
     if event.get('user') == bot_user_id:
         return
 
@@ -181,6 +185,7 @@ def handle_app_mention_events(event, say):
 
 @bolt_app.event("message")
 def handle_message_events(event, say):
+    logging.info(f"Received message event: {event}")
     # Ignore messages from the bot itself to avoid loops
     if event.get('user') == bot_user_id:
         return
@@ -207,7 +212,7 @@ def handle_voiceflow_button(ack, body, client, say, logger):
     thread_ts = body['message'].get('thread_ts', body['message']['ts'])
 
     # Create a unique conversation ID using user_id and thread_ts
-    conversation_id = f"con-{thread_ts}"
+    conversation_id = f"{channel_id}-{thread_ts}"
 
     # Extract the index from the action_id
     button_index = int(action_id.split("_")[-1])
