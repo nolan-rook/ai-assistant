@@ -113,7 +113,7 @@ def process_message(event, say):
     if 'app_mention' in event['type']:
         user_input = re.sub(r"<@U[A-Z0-9]+>", "", user_input, count=1).strip()
 
-    conversation_id = f"{thread_ts}"
+    conversation_id = f"con-{thread_ts}"
     
     processing_messages = [
         "Just a moment..."
@@ -207,7 +207,7 @@ def handle_voiceflow_button(ack, body, client, say, logger):
     thread_ts = body['message'].get('thread_ts', body['message']['ts'])
 
     # Create a unique conversation ID using user_id and thread_ts
-    conversation_id = f"{thread_ts}"
+    conversation_id = f"con-{thread_ts}"
 
     # Extract the index from the action_id
     button_index = int(action_id.split("_")[-1])
