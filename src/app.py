@@ -10,7 +10,7 @@ import os
 import random
 
 import time
-import threading
+from threading import Timer
 
 # Load environment variables
 from dotenv import load_dotenv
@@ -44,15 +44,13 @@ conversations = {}
 
 def send_delayed_message(say, delay, thread_ts, message="Just a moment..."):
     def delayed_action():
-        # Sleep for the specified delay period
-        time.sleep(delay)
         # Send the processing message
         say(text=message, thread_ts=thread_ts)
     
-    # Start the delayed action as a separate thread
-    timer_thread = threading.Thread(target=delayed_action)
-    timer_thread.start()
-    return timer_thread
+    # Create a Timer object that waits for the specified delay before executing the delayed_action
+    timer = Timer(delay, delayed_action)
+    timer.start()
+    return timer
 
 def create_message_blocks(text_responses, button_payloads):
     blocks = []
@@ -133,13 +131,6 @@ def process_message(event, say):
     conversation_id = f"{channel_id}-{thread_ts}"
     
     logging.info(f"Processing in conversation {conversation_id}")
-    
-    processing_messages = [
-        "Just a moment..."
-    ]
-
-    # Send a random processing message
-    say(text=random.choice(processing_messages), thread_ts=thread_ts)
     
     combined_input = user_input
 
