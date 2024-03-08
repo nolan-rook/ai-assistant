@@ -151,9 +151,15 @@ def process_message(event, say):
     for url in urls:
         # Remove the angle brackets from each URL
         url = url[1:-1]
-        webpage_text = extract_webpage_content(url)
-        if webpage_text:
-            combined_input += "\n" + webpage_text
+        try:
+            webpage_text = extract_webpage_content(url)
+            if webpage_text:
+                combined_input += "\n" + webpage_text
+        except Exception as e:
+            logging.error(f"Error reading URL {url}: {str(e)}")
+            # Optionally, you could append a message indicating the URL was skipped
+            combined_input += "\n[Note: A URL was not loaded properly and has been skipped.]"
+
 
     print(combined_input)  # For debugging
     
