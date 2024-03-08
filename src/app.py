@@ -9,6 +9,8 @@ import re
 import os
 import random
 
+import threading
+
 # Load environment variables
 from dotenv import load_dotenv
 load_dotenv()
@@ -38,6 +40,18 @@ voiceflow = VoiceflowAPI()
 
 # Stores the ongoing conversations with Voiceflow
 conversations = {}
+
+def send_delayed_message(say, delay, thread_ts, message="Just a moment..."):
+    def delayed_action():
+        # Sleep for the specified delay period
+        time.sleep(delay)
+        # Send the processing message
+        say(text=message, thread_ts=thread_ts)
+    
+    # Start the delayed action as a separate thread
+    timer_thread = threading.Thread(target=delayed_action)
+    timer_thread.start()
+    return timer_thread
 
 def create_message_blocks(text_responses, button_payloads):
     blocks = []
@@ -110,6 +124,8 @@ def process_message(event, say):
     
     logging.info(f"Processing message from user {user_id} in channel {channel_id}, thread {thread_ts}")
 
+    timer_thread = send_delayed_message(say, 5, thread_ts)
+    
     if 'app_mention' in event['type']:
         user_input = re.sub(r"<@U[A-Z0-9]+>", "", user_input, count=1).strip()
 
@@ -155,6 +171,10 @@ def process_message(event, say):
         is_running, button_payloads = voiceflow.handle_user_input(conversation_id, {'type': 'launch'})
         if is_running:
             is_running, button_payloads = voiceflow.handle_user_input(conversation_id, combined_input)
+
+    # Check if the timer thread is still alive and cancel if so
+    if timer_thread.is_alive():
+        timer_thread.cancel()
 
     conversations[conversation_id] = {
         'channel': event['channel'],
