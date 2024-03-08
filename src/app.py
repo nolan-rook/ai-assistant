@@ -9,6 +9,9 @@ import re
 import os
 import random
 
+import time
+from threading import Timer
+
 # Load environment variables
 from dotenv import load_dotenv
 load_dotenv()
@@ -38,6 +41,16 @@ voiceflow = VoiceflowAPI()
 
 # Stores the ongoing conversations with Voiceflow
 conversations = {}
+
+def send_delayed_message(say, delay, thread_ts, message="Just a moment..."):
+    def delayed_action():
+        # Send the processing message
+        say(text=message, thread_ts=thread_ts)
+    
+    # Create a Timer object that waits for the specified delay before executing the delayed_action
+    timer = Timer(delay, delayed_action)
+    timer.start()
+    return timer
 
 def create_message_blocks(text_responses, button_payloads):
     blocks = []
@@ -110,19 +123,14 @@ def process_message(event, say):
     
     logging.info(f"Processing message from user {user_id} in channel {channel_id}, thread {thread_ts}")
 
+    timer_thread = send_delayed_message(say, 5, thread_ts)
+    
     if 'app_mention' in event['type']:
         user_input = re.sub(r"<@U[A-Z0-9]+>", "", user_input, count=1).strip()
 
     conversation_id = f"{channel_id}-{thread_ts}"
     
     logging.info(f"Processing in conversation {conversation_id}")
-    
-    processing_messages = [
-        "Just a moment..."
-    ]
-
-    # Send a random processing message
-    say(text=random.choice(processing_messages), thread_ts=thread_ts)
     
     combined_input = user_input
 
@@ -143,9 +151,15 @@ def process_message(event, say):
     for url in urls:
         # Remove the angle brackets from each URL
         url = url[1:-1]
-        webpage_text = extract_webpage_content(url)
-        if webpage_text:
-            combined_input += "\n" + webpage_text
+        try:
+            webpage_text = extract_webpage_content(url)
+            if webpage_text:
+                combined_input += "\n" + webpage_text
+        except Exception as e:
+            logging.error(f"Error reading URL {url}: {str(e)}")
+            # Optionally, you could append a message indicating the URL was skipped
+            combined_input += "\n[Note: A URL was not loaded properly and has been skipped.]"
+
 
     print(combined_input)  # For debugging
     
@@ -155,6 +169,10 @@ def process_message(event, say):
         is_running, button_payloads = voiceflow.handle_user_input(conversation_id, {'type': 'launch'})
         if is_running:
             is_running, button_payloads = voiceflow.handle_user_input(conversation_id, combined_input)
+
+    # Check if the timer thread is still alive and cancel if so
+    if timer_thread.is_alive():
+        timer_thread.cancel()
 
     conversations[conversation_id] = {
         'channel': event['channel'],
@@ -220,6 +238,28 @@ def handle_voiceflow_button(ack, body, client, say, logger):
     if conversation_id in conversations:
         button_payloads = conversations[conversation_id]['button_payloads']
         button_payload = button_payloads.get(str(button_index + 1))
+        # print(button_payload)
+        # # Detect if this is the "Blog posts" action
+        # if button_payload['payload']['label'] == "Blog posts":
+        #     trigger_id = body['trigger_id']
+        #     # Define the modal content here
+        #     modal = {
+        #         "type": "modal",
+        #         "callback_id": "blog_posts_modal",
+        #         "title": {"type": "plain_text", "text": "Blog Posts"},
+        #         "blocks": [
+        #             {
+        #                 "type": "input",
+        #                 "block_id": "blog_input",
+        #                 "element": {"type": "plain_text_input", "action_id": "blog_text", "multiline": True},
+        #                 "label": {"type": "plain_text", "text": "Enter blog content"}
+        #             }
+        #         ],
+        #         "submit": {"type": "plain_text", "text": "Submit"}
+        #     }
+        #     # Open the modal
+        #     client.views_open(trigger_id=trigger_id, view=modal)
+        #     return  # Exit the function to prevent further processing for blog posts action
 
         if button_payload:
             # Process the button action to advance the conversation
@@ -250,6 +290,30 @@ def handle_voiceflow_button(ack, body, client, say, logger):
         # Respond in the correct thread if no conversation was found
         client.chat_postMessage(channel=channel_id, text="Sorry, I couldn't find your conversation.", thread_ts=thread_ts)
 
+@bolt_app.view("blog_posts_modal")
+def handle_modal_submission(ack, body, view, client):
+    ack()
+    # Extract the input data
+    blog_content = view['state']['values']['blog_input']['blog_text']['value']
+    # Here you can process the blog content, for example, saving it to a database or posting somewhere
+
+    # Assuming you have the user's ID and the channel ID you want to post the confirmation to
+    user_id = body['user']['id']
+    # Optionally, you can use a specific channel ID if you want the confirmation to be public
+    # channel_id = 'C1234567890' # Example channel ID
+
+    # Construct the confirmation message
+    confirmation_message = "Thank you for submitting your blog post. We've received it and are processing your request."
+
+    # Send the confirmation message to the user
+    try:
+        client.chat_postMessage(
+            channel=user_id, # Direct message to the user
+            # For public confirmation, use 'channel=channel_id' instead of 'channel=user_id'
+            text=confirmation_message
+        )
+    except Exception as e:
+        print(f"Error sending confirmation message: {e}")
         
 def notify_user_completion(conversation_id):
     conversation_details = conversations.get(conversation_id)
