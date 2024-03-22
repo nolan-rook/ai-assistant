@@ -315,7 +315,7 @@ def handle_modal_submission(ack, body, view, client):
     except Exception as e:
         print(f"Error sending confirmation message: {e}")
         
-def notify_user_completion(conversation_id):
+def notify_user_completion(conversation_id, document_id):
     conversation_details = conversations.get(conversation_id)
     if conversation_details:
         channel_id = conversation_details['channel']
@@ -324,7 +324,7 @@ def notify_user_completion(conversation_id):
         thread_ts = conversation_details['thread_ts']  # The thread timestamp for replying in thread
 
         # Construct the notification message, tagging the user
-        completion_message = f"Hey <@{user_id}>! 🎉 I've just finished crafting that blog post for you. Take a peek in the Google Docs folder and let us know your thoughts!"
+        completion_message = f"Hey <@{user_id}>! 🎉 I've just finished crafting your requested document. Take a peek at the following link https://docs.google.com/document/d/{document_id} let us know your thoughts!"
 
         # Use the correct Bolt app instance to send the message
         try:
@@ -341,9 +341,10 @@ def notify_user_completion(conversation_id):
 def task_completed():
     data = request.json
     conversation_id = data.get('conversation_id')
+    document_id = data.get('document_id')
     if conversation_id:
         # Assuming you implement a way to notify users, for example:
-        notify_user_completion(conversation_id)
+        notify_user_completion(conversation_id, document_id)
         return jsonify({"status": "success"}), 200
     else:
         return jsonify({"status": "error", "message": "Missing conversation_id"}), 400
