@@ -324,7 +324,7 @@ def notify_user_completion(conversation_id, document_id):
         thread_ts = conversation_details['thread_ts']  # The thread timestamp for replying in thread
 
         # Construct the notification message, tagging the user
-        completion_message = f"Hey <@{user_id}>! 🎉 I've just finished crafting your requested document. Take a peek at the following link https://docs.google.com/document/d/{document_id} let us know your thoughts!"
+        completion_message = f"Hey <@{user_id}>! 🎉 I've just finished crafting your requested document. Take a peek at the following link https://docs.google.com/document/d/{document_id} and let us know your thoughts!"
 
         # Use the correct Bolt app instance to send the message
         try:
