@@ -348,6 +348,36 @@ def task_completed():
         return jsonify({"status": "success"}), 200
     else:
         return jsonify({"status": "error", "message": "Missing conversation_id"}), 400
+    
+def notify_user_start(conversation_id):
+    conversation_details = conversations.get(conversation_id)
+    if conversation_details:
+        channel_id = conversation_details['channel']
+        user_id = conversation_details['user_id']
+        thread_ts = conversation_details['thread_ts']  # The thread timestamp for replying in thread
+
+        # Construct the start notification message, tagging the user
+        start_message = f"Hey <@{user_id}>! 👋 I've started working on your request. I'll notify you again once everything's ready!"
+
+        # Use the correct Bolt app instance to send the message
+        try:
+            bolt_app.client.chat_postMessage(
+                channel=channel_id, 
+                text=start_message, 
+                thread_ts=thread_ts  # Ensure the message is sent as a reply in the thread
+            )
+        except Exception as e:
+            print(f"Error sending start notification: {e}")
+
+@flask_app.route("/task-started", methods=["POST"])
+def task_started():
+    data = request.json
+    conversation_id = data.get('conversation_id')
+    if conversation_id:
+        notify_user_start(conversation_id)
+        return jsonify({"status": "success", "message": "Task start notification sent"}), 200
+    else:
+        return jsonify({"status": "error", "message": "Missing conversation_id"}), 400
           
 # Start your app
 if __name__ == "__main__":
