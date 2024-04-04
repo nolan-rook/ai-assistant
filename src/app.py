@@ -39,7 +39,7 @@ slack_handler = SlackRequestHandler(bolt_app)
 # Initialize the Voiceflow API client
 voiceflow = VoiceflowAPI()
 
-# Stores the ongoing conversations with Voiceflow
+# Stores the ongoing conversations with Voiceflow, [NEED TO REPLACE THIS WITH DB ASAP]
 conversations = {}
 
 def send_delayed_message(say, delay, thread_ts, message="Just a moment..."):
@@ -357,7 +357,7 @@ def notify_user_start(conversation_id):
         thread_ts = conversation_details['thread_ts']  # The thread timestamp for replying in thread
 
         # Construct the start notification message, tagging the user
-        start_message = f"Hey <@{user_id}>! 👋 I've started working on your request. I'll notify you again once everything's ready!"
+        start_message = "Thankyou, I will start working on it. I will notify you when I'm done. It will take around 10-15 minutes."
 
         # Use the correct Bolt app instance to send the message
         try:
