@@ -353,7 +353,6 @@ def notify_user_start(conversation_id):
     conversation_details = conversations.get(conversation_id)
     if conversation_details:
         channel_id = conversation_details['channel']
-        user_id = conversation_details['user_id']
         thread_ts = conversation_details['thread_ts']  # The thread timestamp for replying in thread
 
         # Construct the start notification message, tagging the user
