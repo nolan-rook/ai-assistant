@@ -66,8 +66,8 @@ async def handle_message_events(event, say):
     conversation_id = f"{channel_id}-{thread_ts}"
     combined_input = await handle_user_input(event, user_input)
 
-    delay_task = asyncio.create_task(send_delayed_message(say, 5, thread_ts))
     try:
+        delay_task = asyncio.create_task(send_delayed_message(say, 5, thread_ts))
         response = await process_voiceflow_interaction(conversation_id, combined_input)
         delay_task.cancel()  # Cancel the delayed message if processing finishes in time
         if response:
