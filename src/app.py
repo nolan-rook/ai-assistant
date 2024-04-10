@@ -34,7 +34,16 @@ voiceflow = VoiceflowAPI()
 @app.on_event("startup")
 async def startup():
     await database.connect()
-
+    await database.execute("""
+        CREATE TABLE IF NOT EXISTS conversations (
+            conversation_id VARCHAR(255) PRIMARY KEY,
+            state TEXT,
+            user_id VARCHAR(255),
+            channel_id VARCHAR(255),
+            thread_ts VARCHAR(255)
+        );
+    """)
+    
 @app.on_event("shutdown")
 async def shutdown():
     await database.disconnect()
@@ -105,8 +114,8 @@ async def process_voiceflow_interaction(conversation_id, input_text):
     is_running, button_payloads = voiceflow.handle_user_input(conversation_id, input_text if state != "new" else {'type': 'launch'})
     if is_running:
         await database.execute(
-            "INSERT INTO conversations (conversation_id, state, user_id, channel_id) VALUES (:conversation_id, :state, :user_id, :channel_id) ON CONFLICT (conversation_id) DO UPDATE SET state = :state",
-            {"conversation_id": conversation_id, "state": "active", "user_id": event["user"], "channel_id": event["channel"]}
+            "INSERT INTO conversations (conversation_id, state, user_id, channel_id, thread_ts) VALUES (:conversation_id, :state, :user_id, :channel_id, :thread_ts) ON CONFLICT (conversation_id) DO UPDATE SET state = :state",
+            {"conversation_id": conversation_id, "state": "active", "user_id": event["user"], "channel_id": event["channel"], "thread_ts": event["thread_ts"]}
         )
 
     responses = voiceflow.get_responses()  # Assuming this method retrieves the latest responses
@@ -126,6 +135,13 @@ def create_message_blocks(text_responses, button_payloads):
         blocks.append({"type": "actions", "elements": buttons})
     return blocks, "Select an option:"
 
+@app.post("/task-started")
+async def task_started():
+    data = await request.json
+    conversation_id = data.get('conversation_id')
+    await notify_user_start(conversation_id)
+    return {"status": "success"}
+
 @app.post("/task-completed")
 async def task_completed(request: Request):
     data = await request.json()
@@ -138,11 +154,24 @@ async def task_completed(request: Request):
     await notify_user_completion(conversation_id, document_id)
     return {"status": "success"}
 
+def notify_user_start(conversation_id):
+    query = "SELECT channel_id, user_id FROM conversations WHERE conversation_id = :conversation_id"
+    result = await database.fetch_one(query, {"conversation_id": conversation_id})
+    if result:
+        channel_id = result['channel_id']
+        thread_ts = result['thread_ts']  # The thread timestamp for replying in thread
+
+        # Construct the start notification message, tagging the user
+        start_message = "Thankyou, I will start working on it. I will notify you when I'm done. It will take around 10-15 minutes."
+        await bolt_app.client.chat_postMessage(channel=channel_id, text=start_message, thread_ts=thread_ts)
+
+
 async def notify_user_completion(conversation_id, document_id):
     query = "SELECT channel_id, user_id FROM conversations WHERE conversation_id = :conversation_id"
     result = await database.fetch_one(query, {"conversation_id": conversation_id})
     if result:
         channel_id = result["channel_id"]
         user_id = result["user_id"]
+        thread_ts = result['thread_ts']
         message = f"Hey <@{user_id}>! Your document is ready: [Document Link](https://docs.google.com/document/d/{document_id})"
-        await bolt_app.client.chat_postMessage(channel=channel_id, text=message)
+        await bolt_app.client.chat_postMessage(channel=channel_id, text=message, thread_ts=thread_ts)
