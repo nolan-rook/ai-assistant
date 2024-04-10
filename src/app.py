@@ -1,14 +1,15 @@
 import os
 import re
 import logging
+from contextlib import asynccontextmanager
 from asyncio import sleep
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response, HTTPException
 from slack_bolt.async_app import AsyncApp
-from slack_bolt.adapter.fastapi.async_handler import AsyncSlackRequestHandler
+from slack_bolt.adapter.fastapi import AsyncSlackRequestHandler
 from databases import Database
 from voiceflow_api import VoiceflowAPI
-from utils import process_file, extract_webpage_content  # Ensure these are async too
+from utils import process_file, extract_webpage_content
 
 # Load environment variables
 load_dotenv()
@@ -19,20 +20,15 @@ slack_signing_secret = os.getenv("SLACK_SIGNING_SECRET")
 slack_bot_token = os.getenv("SLACK_BOT_TOKEN")
 bot_user_id = os.getenv("SLACK_BOT_USER_ID")
 
-# Initialize FastAPI and Slack Bolt App
-app = FastAPI()
-bolt_app = AsyncApp(token=slack_bot_token, signing_secret=slack_signing_secret)
-slack_handler = AsyncSlackRequestHandler(bolt_app)
+# Initialize the Voiceflow API client
+voiceflow = VoiceflowAPI()
 
 # Database initialization
 DATABASE_URL = os.getenv("DATABASE_URL")
 database = Database(DATABASE_URL)
 
-# Initialize the Voiceflow API client
-voiceflow = VoiceflowAPI()
-
-@app.on_event("startup")
-async def startup():
+@asynccontextmanager
+async def app_lifespan(app: FastAPI):
     await database.connect()
     await database.execute("""
         CREATE TABLE IF NOT EXISTS conversations (
@@ -43,10 +39,12 @@ async def startup():
             thread_ts VARCHAR(255)
         );
     """)
-    
-@app.on_event("shutdown")
-async def shutdown():
+    yield
     await database.disconnect()
+
+app = FastAPI(lifespan=app_lifespan)
+bolt_app = AsyncApp(token=slack_bot_token, signing_secret=slack_signing_secret)
+slack_handler = AsyncSlackRequestHandler(bolt_app)
 
 @app.post("/slack/events")
 async def slack_events(request: Request):
@@ -154,7 +152,7 @@ async def task_completed(request: Request):
     await notify_user_completion(conversation_id, document_id)
     return {"status": "success"}
 
-def notify_user_start(conversation_id):
+async def notify_user_start(conversation_id):
     query = "SELECT channel_id, user_id FROM conversations WHERE conversation_id = :conversation_id"
     result = await database.fetch_one(query, {"conversation_id": conversation_id})
     if result:
