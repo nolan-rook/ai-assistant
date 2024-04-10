@@ -68,7 +68,7 @@ async def handle_message_events(event, say):
 
     try:
         delay_task = asyncio.create_task(send_delayed_message(say, 5, thread_ts))
-        response = await process_voiceflow_interaction(conversation_id, combined_input)
+        response = await process_voiceflow_interaction(conversation_id, combined_input, user_id=event["user"], channel_id=event["channel"], thread_ts=thread_ts)
         delay_task.cancel()  # Cancel the delayed message if processing finishes in time
         if response:
             await say(blocks=response["blocks"], text=response["summary_text"], thread_ts=thread_ts)
@@ -104,7 +104,7 @@ async def handle_user_input(event, user_input):
 
     return combined_input
 
-async def process_voiceflow_interaction(conversation_id, input_text):
+async def process_voiceflow_interaction(conversation_id, input_text, user_id, channel_id, thread_ts):
     query = "SELECT state FROM conversations WHERE conversation_id = :conversation_id"
     result = await database.fetch_one(query=query, values={"conversation_id": conversation_id})
     state = result["state"] if result else "new"
@@ -113,7 +113,7 @@ async def process_voiceflow_interaction(conversation_id, input_text):
     if is_running:
         await database.execute(
             "INSERT INTO conversations (conversation_id, state, user_id, channel_id, thread_ts) VALUES (:conversation_id, :state, :user_id, :channel_id, :thread_ts) ON CONFLICT (conversation_id) DO UPDATE SET state = :state",
-            {"conversation_id": conversation_id, "state": "active", "user_id": event["user"], "channel_id": event["channel"], "thread_ts": event["thread_ts"]}
+            {"conversation_id": conversation_id, "state": "active", "user_id": user_id, "channel_id": channel_id, "thread_ts": thread_ts}
         )
 
     responses = voiceflow.get_responses()  # Assuming this method retrieves the latest responses
