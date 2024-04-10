@@ -8,8 +8,8 @@ from fastapi import FastAPI, Request, Response, HTTPException
 from slack_bolt.async_app import AsyncApp
 from slack_bolt.adapter.fastapi.async_handler import AsyncSlackRequestHandler
 from databases import Database
-from voiceflow_api import VoiceflowAPI
-from utils import process_file, extract_webpage_content  # Ensure these are async too
+from src.voiceflow_api import VoiceflowAPI
+from src.utils import process_file, extract_webpage_content  # Ensure these are async too
 
 # Load environment variables
 load_dotenv()
