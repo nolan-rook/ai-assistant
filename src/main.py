@@ -110,7 +110,8 @@ async def process_voiceflow_interaction(conversation_id, input_text, user_id, ch
     result = await database.fetch_one(query=query, values={"conversation_id": conversation_id})
     state = result["state"] if result else "new"
 
-    is_running, button_payloads = voiceflow.handle_user_input(conversation_id, input_text if state != "new" else {'type': 'launch'})
+    is_running, button_payloads = await voiceflow.handle_user_input(conversation_id, input_text if state != "new" else {'type': 'launch'})
+    
     if is_running:
         await database.execute(
             "INSERT INTO conversations (conversation_id, state, user_id, channel_id, thread_ts) VALUES (:conversation_id, :state, :user_id, :channel_id, :thread_ts) ON CONFLICT (conversation_id) DO UPDATE SET state = :state",
