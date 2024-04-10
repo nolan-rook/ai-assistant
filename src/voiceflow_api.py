@@ -1,4 +1,4 @@
-import requests
+import httpx
 import os
 from dotenv import load_dotenv
 
@@ -14,10 +14,11 @@ class VoiceflowAPI:
         self.version_id = os.getenv('VOICEFLOW_VERSION_ID', 'production')
         self.last_message = None
         self.all_responses = []
+        self.client = httpx.AsyncClient()  # Initialize the httpx async client
 
-    def interact(self, conversation_id, request):
-        """Interact with the Voiceflow API and handle the response."""
-        response = requests.post(
+    async def interact(self, conversation_id, request):
+        """Interact with the Voiceflow API and handle the response asynchronously."""
+        response = await self.client.post(
             url=f"{self.runtime_endpoint}/state/{self.version_id}/user/{conversation_id}/interact",
             json={'request': request},
             headers={'Authorization': self.api_key},
@@ -45,25 +46,31 @@ class VoiceflowAPI:
 
         return should_continue, button_payloads
 
-    def handle_user_input(self, conversation_id, user_input):
-        """Handles user input by sending text or button payload to Voiceflow."""
+    async def handle_user_input(self, conversation_id, user_input):
+        """Handles user input by sending text or button payload to Voiceflow asynchronously."""
         if isinstance(user_input, dict):
             # User input is a button payload
-            return self.interact(conversation_id, user_input)
+            return await self.interact(conversation_id, user_input)
         else:
             # User input is regular text
-            return self.interact(conversation_id, {'type': 'text', 'payload': user_input})
+            return await self.interact(conversation_id, {'type': 'text', 'payload': user_input})
 
     def get_last_response(self):
         """Return the last message from Voiceflow."""
         return self.last_message
-    
+
     def get_responses(self):
         """Return all text/speak responses from the current interaction with Voiceflow."""
         return self.all_responses
 
-    def handle_button_input(self, button_text):
-        """Handles the interaction with Voiceflow when a button is pressed."""
+    async def handle_button_input(self, button_text):
+        """Handles the interaction with Voiceflow when a button is pressed asynchronously."""
         # Construct the payload expected by Voiceflow for a button press
         button_payload = {'type': 'text', 'payload': button_text}
-        return self.interact(button_payload)
+        return await self.interact(button_payload)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.client.aclose()  # Close the client when done
