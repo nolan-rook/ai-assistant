@@ -1,8 +1,8 @@
 import os
 import re
 import logging
+import asyncio
 from contextlib import asynccontextmanager
-from asyncio import sleep
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response, HTTPException
 from slack_bolt.async_app import AsyncApp
