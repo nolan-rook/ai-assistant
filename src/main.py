@@ -48,7 +48,7 @@ slack_handler = AsyncSlackRequestHandler(bolt_app)
 
 @app.post("/slack/events")
 async def slack_events(request: Request):
-    return await slack_handler.handle(req=request, resp=Response())
+    return await slack_handler.handle(request)
 
 @bolt_app.event("message")
 async def handle_message_events(event, say):
