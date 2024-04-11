@@ -37,10 +37,10 @@ async def app_lifespan(app: FastAPI):
             conversation_id VARCHAR(255) PRIMARY KEY,
             user_id VARCHAR(255),
             channel_id VARCHAR(255),
-            thread_ts VARCHAR(255)
+            thread_ts VARCHAR(255),
+            button_payloads JSONB
         );
     """)
-    yield
     await database.disconnect()
     
 # Initialize the Slack app
@@ -144,17 +144,19 @@ async def process_message(event, say):
             is_running, button_payloads = await voiceflow.handle_user_input(conversation_id, combined_input)
 
     await database.execute("""
-        INSERT INTO conversations (conversation_id, user_id, channel_id, thread_ts)
-        VALUES (:conversation_id, :user_id, :channel_id, :thread_ts)
+        INSERT INTO conversations (conversation_id, user_id, channel_id, thread_ts, button_payloads)
+        VALUES (:conversation_id, :user_id, :channel_id, :thread_ts, :button_payloads)
         ON CONFLICT (conversation_id) DO UPDATE SET
             user_id = :user_id,
             channel_id = :channel_id,
-            thread_ts = :thread_ts
+            thread_ts = :thread_ts,
+            button_payloads = :button_payloads
     """, values={
         "conversation_id": conversation_id,
         "user_id": user_id,
         "channel_id": channel_id,
-        "thread_ts": thread_ts
+        "thread_ts": thread_ts,
+        "button_payloads": button_payloads
     })
 
     blocks, summary_text = create_message_blocks(await voiceflow.get_responses(), button_payloads)
@@ -216,36 +218,49 @@ async def handle_voiceflow_button(ack, body, client, say, logger):
 
     conversation = await database.fetch_one("SELECT * FROM conversations WHERE conversation_id = :conversation_id", values={"conversation_id": conversation_id})
     if conversation:
-        # Retrieve the button payload based on the button index
-        button_payload = None
-        is_running, button_payloads = await voiceflow.interact(conversation_id, {'type': 'launch'})
+        # Retrieve the button payloads from the database
+        button_payloads = conversation.get('button_payloads')
+
         if button_payloads:
             button_payload = button_payloads.get(str(button_index + 1))
 
-        if button_payload:
-            # Process the button action to advance the conversation
-            is_running, new_button_payloads = await voiceflow.handle_user_input(conversation_id, button_payload)
+            if button_payload:
+                # Process the button action to advance the conversation
+                is_running, new_button_payloads = await voiceflow.handle_user_input(conversation_id, button_payload)
 
-            # Update the message to remove the buttons
-            try:
-                original_blocks = body['message'].get('blocks', [])
-                updated_blocks = [block for block in original_blocks if block['type'] != 'actions']
-                await client.chat_update(
-                    channel=channel_id,
-                    ts=message_ts,
-                    blocks=updated_blocks
-                )
-            except Exception as e:
-                logger.error(f"Failed to update message: {e}")
+                # Update the conversation in the database with the new button payloads
+                await database.execute("""
+                    UPDATE conversations
+                    SET button_payloads = :button_payloads
+                    WHERE conversation_id = :conversation_id
+                """, values={
+                    "button_payloads": new_button_payloads,
+                    "conversation_id": conversation_id
+                })
 
-            # Send a new message reflecting the next stage in the conversation
-            if is_running:
-                blocks, summary_text = create_message_blocks(await voiceflow.get_responses(), new_button_payloads)
-                await client.chat_postMessage(channel=channel_id, blocks=blocks, text=summary_text, thread_ts=thread_ts)
+                # Update the message to remove the buttons
+                try:
+                    original_blocks = body['message'].get('blocks', [])
+                    updated_blocks = [block for block in original_blocks if block['type'] != 'actions']
+                    await client.chat_update(
+                        channel=channel_id,
+                        ts=message_ts,
+                        blocks=updated_blocks
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to update message: {e}")
 
+                # Send a new message reflecting the next stage in the conversation
+                if is_running:
+                    blocks, summary_text = create_message_blocks(await voiceflow.get_responses(), new_button_payloads)
+                    await client.chat_postMessage(channel=channel_id, blocks=blocks, text=summary_text, thread_ts=thread_ts)
+
+            else:
+                # Respond in the correct thread if the choice wasn't understood
+                await client.chat_postMessage(channel=channel_id, text="Sorry, I didn't understand that choice.", thread_ts=thread_ts)
         else:
-            # Respond in the correct thread if the choice wasn't understood
-            await client.chat_postMessage(channel=channel_id, text="Sorry, I didn't understand that choice.", thread_ts=thread_ts)
+            # Respond in the correct thread if no button payloads were found
+            await client.chat_postMessage(channel=channel_id, text="Sorry, I couldn't find the button options for this conversation.", thread_ts=thread_ts)
     else:
         # Respond in the correct thread if no conversation was found
         await client.chat_postMessage(channel=channel_id, text="Sorry, I couldn't find your conversation.", thread_ts=thread_ts)
