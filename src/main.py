@@ -41,7 +41,10 @@ async def app_lifespan(app: FastAPI):
             button_payloads JSONB
         );
     """)
-    await database.disconnect()
+    try:
+        yield
+    finally:
+        await database.disconnect()
     
 # Initialize the Slack app
 bolt_app = AsyncApp(token=slack_bot_token, signing_secret=slack_signing_secret)
