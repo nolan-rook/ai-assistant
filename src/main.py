@@ -281,6 +281,7 @@ async def handle_voiceflow_button(ack, body, client, say, logger):
                     await client.chat_update(
                         channel=channel_id,
                         ts=message_ts,
+                        text="Selected an option",  # Add a fallback text
                         blocks=updated_blocks
                     )
                 except Exception as e:
