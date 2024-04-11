@@ -109,7 +109,7 @@ async def process_voiceflow_interaction(conversation_id, input_text, user_id, ch
     query = "SELECT state FROM conversations WHERE conversation_id = :conversation_id"
     result = await database.fetch_one(query=query, values={"conversation_id": conversation_id})
     state = result["state"] if result else "new"
-
+    
     is_running, button_payloads = await voiceflow.handle_user_input(conversation_id, input_text if state != "new" else {'type': 'launch'})
     
     if is_running:
