@@ -23,11 +23,12 @@ class VoiceflowAPI:
             json={'request': request},
             headers={'Authorization': self.api_key},
         )
-        response.raise_for_status()  # Raise an exception for HTTP errors
-        self.all_responses = []
+        logging.info(f"Raw HTTP response: {response.text}")
+        response.raise_for_status()
         return self.parse_response(response.json())
 
     def parse_response(self, response_data):
+        logging.info(f"Raw Voiceflow response data: {response_data}")
         """Parse the response data from Voiceflow."""
         button_payloads = {}
         should_continue = True
