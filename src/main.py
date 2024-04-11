@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import re
+import json
 from contextlib import asynccontextmanager
 from typing import Dict
 
@@ -134,7 +135,31 @@ async def process_message(event, say):
 
     combined_input = user_input
 
-    # ... (keep the existing code for processing files and URLs)
+    # Fetch files from the event, if any
+    files = event.get('files', [])
+
+    # Process any file part of the message
+    if files:
+        for file_info in files:
+            file_url = file_info.get('url_private_download')
+            file_type = file_info.get('filetype')
+            if file_url:
+                file_text = process_file(file_url, file_type)
+                if file_text:
+                    combined_input += "\n" + file_text
+    # Extract URLs and remove the enclosing angle brackets
+    urls = re.findall(r'<http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+[^>),\s]*>', user_input)
+    for url in urls:
+        # Remove the angle brackets from each URL
+        url = url[1:-1]
+        try:
+            webpage_text = extract_webpage_content(url)
+            if webpage_text:
+                combined_input += "\n" + webpage_text
+        except Exception as e:
+            logging.error(f"Error reading URL {url}: {str(e)}")
+            # Optionally, you could append a message indicating the URL was skipped
+            combined_input += "\n[Note: A URL was not loaded properly and has been skipped.]"
 
     print(combined_input)  # For debugging
 
@@ -145,6 +170,9 @@ async def process_message(event, say):
         is_running, button_payloads = await voiceflow.handle_user_input(conversation_id, {'type': 'launch'})
         if is_running:
             is_running, button_payloads = await voiceflow.handle_user_input(conversation_id, combined_input)
+
+    # Convert button_payloads to JSON string
+    button_payloads_json = json.dumps(button_payloads)
 
     await database.execute("""
         INSERT INTO conversations (conversation_id, user_id, channel_id, thread_ts, button_payloads)
@@ -159,7 +187,7 @@ async def process_message(event, say):
         "user_id": user_id,
         "channel_id": channel_id,
         "thread_ts": thread_ts,
-        "button_payloads": button_payloads
+        "button_payloads": button_payloads_json  # Use the JSON string
     })
 
     blocks, summary_text = create_message_blocks(await voiceflow.get_responses(), button_payloads)
