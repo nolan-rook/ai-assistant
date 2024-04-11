@@ -249,15 +249,20 @@ async def handle_voiceflow_button(ack, body, client, say, logger):
 
     conversation = await database.fetch_one("SELECT * FROM conversations WHERE conversation_id = :conversation_id", values={"conversation_id": conversation_id})
     if conversation:
-        # Retrieve the button payloads from the database
-        button_payloads = conversation.get('button_payloads')
+        # Get the button_payloads field from the conversation object
+        button_payloads_json = conversation.button_payloads
 
-        if button_payloads:
+        if button_payloads_json:
+            # Parse the JSON string back into a dictionary
+            button_payloads = json.loads(button_payloads_json)
             button_payload = button_payloads.get(str(button_index + 1))
 
             if button_payload:
                 # Process the button action to advance the conversation
                 is_running, new_button_payloads = await voiceflow.handle_user_input(conversation_id, button_payload)
+
+                # Convert the new button payloads to JSON string
+                new_button_payloads_json = json.dumps(new_button_payloads)
 
                 # Update the conversation in the database with the new button payloads
                 await database.execute("""
@@ -265,7 +270,7 @@ async def handle_voiceflow_button(ack, body, client, say, logger):
                     SET button_payloads = :button_payloads
                     WHERE conversation_id = :conversation_id
                 """, values={
-                    "button_payloads": new_button_payloads,
+                    "button_payloads": new_button_payloads_json,
                     "conversation_id": conversation_id
                 })
 
