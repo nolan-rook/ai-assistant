@@ -216,10 +216,11 @@ async def handle_voiceflow_button(ack, body, client, say, logger):
 
     conversation = await database.fetch_one("SELECT * FROM conversations WHERE conversation_id = :conversation_id", values={"conversation_id": conversation_id})
     if conversation:
-        # Retrieve the button_payloads from the Voiceflow API
-        is_running, button_payloads = await voiceflow.get_button_payloads(conversation_id)
-
-        button_payload = button_payloads.get(str(button_index + 1)) if button_payloads else None
+        # Retrieve the button payload based on the button index
+        button_payload = None
+        is_running, button_payloads = await voiceflow.interact(conversation_id, {'type': 'launch'})
+        if button_payloads:
+            button_payload = button_payloads.get(str(button_index + 1))
 
         if button_payload:
             # Process the button action to advance the conversation
