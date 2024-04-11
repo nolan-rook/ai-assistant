@@ -7,7 +7,7 @@ from typing import Dict
 
 from databases import Database
 from fastapi import FastAPI, Request, BackgroundTasks
-from slack_bolt.adapter.fastapi import SlackRequestHandler
+from slack_bolt.adapter.fastapi.async_handler import AsyncSlackRequestHandler
 from slack_bolt.async_app import AsyncApp
 
 from src.voiceflow_api import VoiceflowAPI
@@ -303,11 +303,11 @@ async def task_started(data: Dict):
         return {"status": "error", "message": "Missing conversation_id"}
 
 # Mount the Slack request handler
-slack_handler = SlackRequestHandler(bolt_app)
+slack_handler = AsyncSlackRequestHandler(bolt_app)
 
 @app.post("/slack/events")
-async def slack_events(request: Request):
-    return await slack_handler.handle(request)
+async def slack_events(req: Request):
+    return await slack_handler.handle(req)
 
 if __name__ == "__main__":
     import uvicorn
