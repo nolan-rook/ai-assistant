@@ -1,25 +1,26 @@
+import asyncio
+import logging
 import os
 import re
-import logging
-import asyncio
 from contextlib import asynccontextmanager
-from dotenv import load_dotenv
-from fastapi import FastAPI, Request, Response, HTTPException
-from slack_bolt.async_app import AsyncApp
-from slack_bolt.adapter.fastapi.async_handler import AsyncSlackRequestHandler
-from slack_sdk.errors import SlackApiError
+from typing import Dict
+
 from databases import Database
+from fastapi import FastAPI, Request, BackgroundTasks
+from slack_bolt.adapter.fastapi import SlackRequestHandler
+from slack_bolt.async_app import AsyncApp
+
 from src.voiceflow_api import VoiceflowAPI
-from src.utils import process_file, extract_webpage_content  # Ensure these are async too
+from src.utils import process_file, extract_webpage_content
 
-# Load environment variables
-load_dotenv()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.getLogger('slack_bolt.AsyncApp').setLevel(logging.ERROR)
 
-# Slack bot credentials
 slack_signing_secret = os.getenv("SLACK_SIGNING_SECRET")
 slack_bot_token = os.getenv("SLACK_BOT_TOKEN")
 bot_user_id = os.getenv("SLACK_BOT_USER_ID")
+
+logging.info(f"Bot User ID from environment: {bot_user_id}")
 
 # Initialize the Voiceflow API client
 voiceflow = VoiceflowAPI()
@@ -34,7 +35,6 @@ async def app_lifespan(app: FastAPI):
     await database.execute("""
         CREATE TABLE IF NOT EXISTS conversations (
             conversation_id VARCHAR(255) PRIMARY KEY,
-            state TEXT,
             user_id VARCHAR(255),
             channel_id VARCHAR(255),
             thread_ts VARCHAR(255)
@@ -42,160 +42,273 @@ async def app_lifespan(app: FastAPI):
     """)
     yield
     await database.disconnect()
-
-app = FastAPI(lifespan=app_lifespan)
+    
+# Initialize the Slack app
 bolt_app = AsyncApp(token=slack_bot_token, signing_secret=slack_signing_secret)
-slack_handler = AsyncSlackRequestHandler(bolt_app)
 
-@app.post("/slack/events")
-async def slack_events(request: Request):
-    return await slack_handler.handle(request)
+# Initialize the FastAPI app
+app = FastAPI(lifespan=app_lifespan)
 
-@bolt_app.event("message")
-async def handle_message_events(event, say):
-    if event.get('user') == bot_user_id:
-        return
+async def send_delayed_message(say, delay, thread_ts, message="Just a moment..."):
+    await asyncio.sleep(delay)
+    await say(text=message, thread_ts=thread_ts)
 
+def create_message_blocks(text_responses, button_payloads):
+    blocks = []
+    summary_text = "Select an option:"  # Fallback text for notifications
+    max_chars = 3000  # Maximum characters for a block of text
+
+    # Function to split text into chunks of max_chars
+    def split_text(text, max_length):
+        for start in range(0, len(text), max_length):
+            yield text[start:start + max_length]
+
+    # Add text responses as section blocks
+    for text in text_responses:
+        if len(text) <= max_chars:
+            blocks.append({"type": "divider"})
+            blocks.append({
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": text
+                }
+            })
+        else:
+            # Split text into chunks and add each as a separate block
+            for chunk in split_text(text, max_chars):
+                blocks.append({"type": "divider"})
+                blocks.append({
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": chunk
+                    }
+                })
+
+    blocks.append({"type": "divider"})
+    # Prepare buttons with unique action_ids
+    buttons = []
+    for idx, (button_value, button_payload) in enumerate(button_payloads.items()):
+        button_text = button_payload['payload']['label']
+        buttons.append({
+            "type": "button",
+            "text": {
+                "type": "plain_text",
+                "text": button_text,
+                "emoji": True
+            },
+            "value": button_value,
+            "action_id": f"voiceflow_button_{idx}"  # Unique action_id for each button
+        })
+
+    # Add buttons in one section
+    if buttons:
+        blocks.append({
+            "type": "actions",
+            "elements": buttons
+        })
+
+    return blocks, summary_text
+
+async def process_message(event, say):
     user_id = event.get('user')
     channel_id = event.get('channel')
     thread_ts = event.get('thread_ts', event['ts'])
     user_input = event.get('text', '').strip()
 
+    logging.info(f"Processing message from user {user_id} in channel {channel_id}, thread {thread_ts}")
+
+    background_tasks = BackgroundTasks()
+    background_tasks.add_task(send_delayed_message, say, 5, thread_ts)
+
     if 'app_mention' in event['type']:
         user_input = re.sub(r"<@U[A-Z0-9]+>", "", user_input, count=1).strip()
 
     conversation_id = f"{channel_id}-{thread_ts}"
-    combined_input = await handle_user_input(event, user_input)
 
-    try:
-        delay_task = asyncio.create_task(send_delayed_message(say, 5, thread_ts))
-        response = await process_voiceflow_interaction(conversation_id, combined_input, user_id=event["user"], channel_id=event["channel"], thread_ts=thread_ts)
-        delay_task.cancel()  # Cancel the delayed message if processing finishes in time
-        if response:
-            await say(blocks=response["blocks"], text=response["summary_text"], thread_ts=thread_ts)
-    except Exception as e:
-        logging.error(f"Error processing voiceflow interaction: {str(e)}")
-        if not delay_task.cancelled():
-            delay_task.cancel()
-        await say(text="Failed to process your request.", thread_ts=thread_ts)
+    logging.info(f"Processing in conversation {conversation_id}")
 
-async def send_delayed_message(say, delay, thread_ts, message="Just a moment..."):
-    try:
-        await asyncio.sleep(delay)
-        await say(text=message, thread_ts=thread_ts)
-    except SlackApiError as e:
-        logging.error(f"Failed to send delayed message: {str(e)}")
-
-async def handle_user_input(event, user_input):
     combined_input = user_input
-    files = event.get('files', [])
 
-    for file_info in files:
-        file_url = file_info.get('url_private_download')
-        file_type = file_info.get('filetype')
-        if file_url:
-            file_text = await process_file(file_url, file_type)
-            combined_input += "\n" + file_text if file_text else ""
+    # ... (keep the existing code for processing files and URLs)
 
-    urls = re.findall(r'<http[s]?://[^\s]+>', user_input)
-    for url in urls:
-        clean_url = url.strip('<>')
-        webpage_text = await extract_webpage_content(clean_url)
-        combined_input += "\n" + webpage_text if webpage_text else "[URL content could not be loaded]"
+    print(combined_input)  # For debugging
 
-    return combined_input
-
-async def process_voiceflow_interaction(conversation_id, input_text, user_id, channel_id, thread_ts):
-    query = "SELECT state FROM conversations WHERE conversation_id = :conversation_id"
-    result = await database.fetch_one(query=query, values={"conversation_id": conversation_id})
-    state = result["state"] if result else "new"
-    
-    is_running, button_payloads = await voiceflow.handle_user_input(conversation_id, input_text if state != "new" else {'type': 'launch'})
-    
-    if is_running:
-        await database.execute(
-            "INSERT INTO conversations (conversation_id, state, user_id, channel_id, thread_ts) VALUES (:conversation_id, :state, :user_id, :channel_id, :thread_ts) ON CONFLICT (conversation_id) DO UPDATE SET state = :state",
-            {"conversation_id": conversation_id, "state": "active", "user_id": user_id, "channel_id": channel_id, "thread_ts": thread_ts}
-        )
-
-    responses = voiceflow.get_responses()
-    if responses:
-        for response in responses:
-            # Send each response as a separate message to Slack
-            await say(text=response, thread_ts=thread_ts)
-    
-    # After all individual messages have been sent, send the buttons if any
-    if button_payloads:
-        buttons_block = create_buttons_block(button_payloads)
-        await say(blocks=buttons_block, thread_ts=thread_ts)
-        
-def create_message_blocks(text_responses, button_payloads):
-    blocks = []
-    # Iterate through all text responses and add them to message blocks
-    for text in text_responses:
-        blocks.append({
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": text
-            }
-        })
-
-    # Add buttons if they exist
-    buttons = [
-        {
-            "type": "button",
-            "text": {"type": "plain_text", "text": payload["label"], "emoji": True},
-            "value": str(idx),
-            "action_id": f"voiceflow_button_{idx}"
-        } for idx, payload in enumerate(button_payloads.values(), start=1)
-    ]
-
-    if buttons:
-        blocks.append({"type": "actions", "elements": buttons})
-        summary_text = "Select an option:"  # This text is used for notifications
+    conversation = await database.fetch_one("SELECT * FROM conversations WHERE conversation_id = :conversation_id", values={"conversation_id": conversation_id})
+    if conversation:
+        is_running, button_payloads = await voiceflow.handle_user_input(conversation_id, combined_input)
     else:
-        summary_text = text_responses[-1]  # Fallback to the last message if no buttons
+        is_running, button_payloads = await voiceflow.handle_user_input(conversation_id, {'type': 'launch'})
+        if is_running:
+            is_running, button_payloads = await voiceflow.handle_user_input(conversation_id, combined_input)
 
-    return blocks, summary_text
+    await database.execute("""
+        INSERT INTO conversations (conversation_id, user_id, channel_id, thread_ts)
+        VALUES (:conversation_id, :user_id, :channel_id, :thread_ts)
+        ON CONFLICT (conversation_id) DO UPDATE SET
+            user_id = :user_id,
+            channel_id = :channel_id,
+            thread_ts = :thread_ts
+    """, values={
+        "conversation_id": conversation_id,
+        "user_id": user_id,
+        "channel_id": channel_id,
+        "thread_ts": thread_ts
+    })
 
-@app.post("/task-started")
-async def task_started():
-    data = await request.json
-    conversation_id = data.get('conversation_id')
-    await notify_user_start(conversation_id)
-    return {"status": "success"}
+    blocks, summary_text = create_message_blocks(await voiceflow.get_responses(), button_payloads)
+    logging.info(f"Sending blocks: {blocks}, summary_text: {summary_text}, thread_ts: {thread_ts}")
+    await say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
 
-@app.post("/task-completed")
-async def task_completed(request: Request):
-    data = await request.json()
-    conversation_id = data.get('conversation_id')
-    document_id = data.get('document_id')
+@bolt_app.event("app_mention")
+async def handle_app_mention_events(event, say):
+    logging.info(f"Received app_mention event: {event}")
+    if event.get('user') == bot_user_id:
+        return
 
-    if not (conversation_id and document_id):
-        raise HTTPException(status_code=400, detail="Missing conversation_id or document_id")
+    thread_ts = event.get('thread_ts', event['ts'])
+    channel_id = event['channel']
 
-    await notify_user_completion(conversation_id, document_id)
-    return {"status": "success"}
+    await database.execute("""
+        INSERT INTO conversations (conversation_id, channel_id, thread_ts)
+        VALUES (:conversation_id, :channel_id, :thread_ts)
+        ON CONFLICT (conversation_id) DO NOTHING
+    """, values={
+        "conversation_id": f"{channel_id}-{thread_ts}",
+        "channel_id": channel_id,
+        "thread_ts": thread_ts
+    })
 
-async def notify_user_start(conversation_id):
-    query = "SELECT channel_id, user_id FROM conversations WHERE conversation_id = :conversation_id"
-    result = await database.fetch_one(query, {"conversation_id": conversation_id})
-    if result:
-        channel_id = result['channel_id']
-        thread_ts = result['thread_ts']  # The thread timestamp for replying in thread
+    await process_message(event, say)
 
-        # Construct the start notification message, tagging the user
-        start_message = "Thankyou, I will start working on it. I will notify you when I'm done. It will take around 10-15 minutes."
-        await bolt_app.client.chat_postMessage(channel=channel_id, text=start_message, thread_ts=thread_ts)
+@bolt_app.event("message")
+async def handle_message_events(event, say):
+    logging.info(f"Received message event: {event}")
+    if event.get('user') == bot_user_id:
+        return
 
+    if event.get('channel_type') == 'im':
+        await process_message(event, say)
+
+    thread_ts = event.get('thread_ts', event.get('ts'))
+    is_threaded = bool(event.get('thread_ts'))
+
+    if is_threaded:
+        conversation = await database.fetch_one("SELECT * FROM conversations WHERE thread_ts = :thread_ts", values={"thread_ts": thread_ts})
+        if conversation:
+            await process_message(event, say)
+
+@bolt_app.action(re.compile("voiceflow_button_"))
+async def handle_voiceflow_button(ack, body, client, say, logger):
+    await ack()
+    action_id = body['actions'][0]['action_id']
+    user_id = body['user']['id']
+    channel_id = body['channel']['id']
+    message_ts = body['message']['ts']
+    thread_ts = body['message'].get('thread_ts', body['message']['ts'])
+
+    conversation_id = f"{channel_id}-{thread_ts}"
+
+    button_index = int(action_id.split("_")[-1])
+
+    conversation = await database.fetch_one("SELECT * FROM conversations WHERE conversation_id = :conversation_id", values={"conversation_id": conversation_id})
+    if conversation:
+        button_payloads = conversation.get('button_payloads')
+        button_payload = button_payloads.get(str(button_index + 1)) if button_payloads else None
+
+        if button_payload:
+            is_running, new_button_payloads = await voiceflow.handle_user_input(conversation_id, button_payload)
+            await database.execute("""
+                UPDATE conversations
+                SET button_payloads = :button_payloads
+                WHERE conversation_id = :conversation_id
+            """, values={
+                "conversation_id": conversation_id,
+                "button_payloads": new_button_payloads
+            })
+
+            try:
+                original_blocks = body['message'].get('blocks', [])
+                updated_blocks = [block for block in original_blocks if block['type'] != 'actions']
+                await client.chat_update(
+                    channel=channel_id,
+                    ts=message_ts,
+                    blocks=updated_blocks
+                )
+            except Exception as e:
+                logger.error(f"Failed to update message: {e}")
+
+            if is_running:
+                blocks, summary_text = create_message_blocks(await voiceflow.get_responses(), new_button_payloads)
+                await client.chat_postMessage(channel=channel_id, blocks=blocks, text=summary_text, thread_ts=thread_ts)
+
+        else:
+            await client.chat_postMessage(channel=channel_id, text="Sorry, I didn't understand that choice.", thread_ts=thread_ts)
+    else:
+        await client.chat_postMessage(channel=channel_id, text="Sorry, I couldn't find your conversation.", thread_ts=thread_ts)
 
 async def notify_user_completion(conversation_id, document_id):
-    query = "SELECT channel_id, user_id FROM conversations WHERE conversation_id = :conversation_id"
-    result = await database.fetch_one(query, {"conversation_id": conversation_id})
-    if result:
-        channel_id = result["channel_id"]
-        user_id = result["user_id"]
-        thread_ts = result['thread_ts']
-        message = f"Hey <@{user_id}>! Your document is ready: [Document Link](https://docs.google.com/document/d/{document_id})"
-        await bolt_app.client.chat_postMessage(channel=channel_id, text=message, thread_ts=thread_ts)
+    conversation = await database.fetch_one("SELECT * FROM conversations WHERE conversation_id = :conversation_id", values={"conversation_id": conversation_id})
+    if conversation:
+        channel_id = conversation['channel_id']
+        user_id = conversation['user_id']
+        thread_ts = conversation['thread_ts']
+
+        completion_message = f"Hey <@{user_id}>! 🎉 I've just finished crafting your requested document. Take a peek at the following link https://docs.google.com/document/d/{document_id} and let us know your thoughts!"
+
+        try:
+            await bolt_app.client.chat_postMessage(
+                channel=channel_id,
+                text=completion_message,
+                thread_ts=thread_ts
+            )
+        except Exception as e:
+            print(f"Error sending completion notification: {e}")
+
+@app.post("/task-completed")
+async def task_completed(data: Dict):
+    conversation_id = data.get('conversation_id')
+    document_id = data.get('document_id')
+    if conversation_id:
+        await notify_user_completion(conversation_id, document_id)
+        return {"status": "success"}
+    else:
+        return {"status": "error", "message": "Missing conversation_id"}
+
+async def notify_user_start(conversation_id):
+    conversation = await database.fetch_one("SELECT * FROM conversations WHERE conversation_id = :conversation_id", values={"conversation_id": conversation_id})
+    if conversation:
+        channel_id = conversation['channel_id']
+        thread_ts = conversation['thread_ts']
+
+        start_message = "Thank you, I will start working on it. I will notify you when I'm done. It will take around 10-15 minutes."
+
+        try:
+            await bolt_app.client.chat_postMessage(
+                channel=channel_id,
+                text=start_message,
+                thread_ts=thread_ts
+            )
+        except Exception as e:
+            print(f"Error sending start notification: {e}")
+
+@app.post("/task-started")
+async def task_started(data: Dict):
+    conversation_id = data.get('conversation_id')
+    if conversation_id:
+        await notify_user_start(conversation_id)
+        return {"status": "success", "message": "Task start notification sent"}
+    else:
+        return {"status": "error", "message": "Missing conversation_id"}
+
+# Mount the Slack request handler
+slack_handler = SlackRequestHandler(bolt_app)
+
+@app.post("/slack/events")
+async def slack_events(request: Request):
+    return await slack_handler.handle(request)
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ["PORT"]))
