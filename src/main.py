@@ -118,22 +118,41 @@ async def process_voiceflow_interaction(conversation_id, input_text, user_id, ch
             {"conversation_id": conversation_id, "state": "active", "user_id": user_id, "channel_id": channel_id, "thread_ts": thread_ts}
         )
 
-    responses = voiceflow.get_responses()  # Assuming this method retrieves the latest responses
+    responses = voiceflow.get_responses()
+    logging.info(f"Voiceflow responses: {responses}")
+
     blocks, summary_text = create_message_blocks(responses, button_payloads)
     return {"blocks": blocks, "summary_text": summary_text}
 
 def create_message_blocks(text_responses, button_payloads):
-    blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": text}} for text in text_responses]
-    buttons = [{
-        "type": "button",
-        "text": {"type": "plain_text", "text": payload["payload"]["label"], "emoji": True},
-        "value": str(idx),
-        "action_id": f"voiceflow_button_{idx}"
-    } for idx, payload in button_payloads.items()]
+    blocks = []
+    # Iterate through all text responses and add them to message blocks
+    for text in text_responses:
+        blocks.append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": text
+            }
+        })
+
+    # Add buttons if they exist
+    buttons = [
+        {
+            "type": "button",
+            "text": {"type": "plain_text", "text": payload["label"], "emoji": True},
+            "value": str(idx),
+            "action_id": f"voiceflow_button_{idx}"
+        } for idx, payload in enumerate(button_payloads.values(), start=1)
+    ]
 
     if buttons:
         blocks.append({"type": "actions", "elements": buttons})
-    return blocks, "Select an option:"
+        summary_text = "Select an option:"  # This text is used for notifications
+    else:
+        summary_text = text_responses[-1]  # Fallback to the last message if no buttons
+
+    return blocks, summary_text
 
 @app.post("/task-started")
 async def task_started():
