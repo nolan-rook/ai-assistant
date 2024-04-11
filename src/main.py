@@ -201,23 +201,26 @@ async def handle_message_events(event, say):
 
 @bolt_app.action(re.compile("voiceflow_button_"))
 async def handle_voiceflow_button(ack, body, client, say, logger):
-    await ack()
+    await ack()  # Acknowledge the action
     action_id = body['actions'][0]['action_id']
     user_id = body['user']['id']
     channel_id = body['channel']['id']
-    message_ts = body['message']['ts']
+    message_ts = body['message']['ts']  # Timestamp of the original message
     thread_ts = body['message'].get('thread_ts', body['message']['ts'])
 
+    # Create a unique conversation ID using user_id and thread_ts
     conversation_id = f"{channel_id}-{thread_ts}"
 
+    # Extract the index from the action_id
     button_index = int(action_id.split("_")[-1])
 
     conversation = await database.fetch_one("SELECT * FROM conversations WHERE conversation_id = :conversation_id", values={"conversation_id": conversation_id})
     if conversation:
-        button_payloads = conversation.get('button_payloads')
+        button_payloads = conversation['button_payloads']  # Access button_payloads as a dictionary key
         button_payload = button_payloads.get(str(button_index + 1)) if button_payloads else None
 
         if button_payload:
+            # Process the button action to advance the conversation
             is_running, new_button_payloads = await voiceflow.handle_user_input(conversation_id, button_payload)
             await database.execute("""
                 UPDATE conversations
@@ -228,6 +231,7 @@ async def handle_voiceflow_button(ack, body, client, say, logger):
                 "button_payloads": new_button_payloads
             })
 
+            # Update the message to remove the buttons
             try:
                 original_blocks = body['message'].get('blocks', [])
                 updated_blocks = [block for block in original_blocks if block['type'] != 'actions']
@@ -239,13 +243,16 @@ async def handle_voiceflow_button(ack, body, client, say, logger):
             except Exception as e:
                 logger.error(f"Failed to update message: {e}")
 
+            # Send a new message reflecting the next stage in the conversation
             if is_running:
                 blocks, summary_text = create_message_blocks(await voiceflow.get_responses(), new_button_payloads)
                 await client.chat_postMessage(channel=channel_id, blocks=blocks, text=summary_text, thread_ts=thread_ts)
 
         else:
+            # Respond in the correct thread if the choice wasn't understood
             await client.chat_postMessage(channel=channel_id, text="Sorry, I didn't understand that choice.", thread_ts=thread_ts)
     else:
+        # Respond in the correct thread if no conversation was found
         await client.chat_postMessage(channel=channel_id, text="Sorry, I couldn't find your conversation.", thread_ts=thread_ts)
 
 async def notify_user_completion(conversation_id, document_id):
