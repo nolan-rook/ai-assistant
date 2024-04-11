@@ -216,20 +216,14 @@ async def handle_voiceflow_button(ack, body, client, say, logger):
 
     conversation = await database.fetch_one("SELECT * FROM conversations WHERE conversation_id = :conversation_id", values={"conversation_id": conversation_id})
     if conversation:
-        button_payloads = conversation['button_payloads']  # Access button_payloads as a dictionary key
+        # Retrieve the button_payloads from the Voiceflow API
+        is_running, button_payloads = await voiceflow.get_button_payloads(conversation_id)
+
         button_payload = button_payloads.get(str(button_index + 1)) if button_payloads else None
 
         if button_payload:
             # Process the button action to advance the conversation
             is_running, new_button_payloads = await voiceflow.handle_user_input(conversation_id, button_payload)
-            await database.execute("""
-                UPDATE conversations
-                SET button_payloads = :button_payloads
-                WHERE conversation_id = :conversation_id
-            """, values={
-                "conversation_id": conversation_id,
-                "button_payloads": new_button_payloads
-            })
 
             # Update the message to remove the buttons
             try:
