@@ -31,10 +31,10 @@ class VoiceflowAPI:
         return self.parse_response(response.json())
 
     def parse_response(self, response_data):
-        logging.info(f"Raw Voiceflow response data: {response_data}")
         """Parse the response data from Voiceflow."""
         button_payloads = {}
         should_continue = True
+        all_responses = []  # Reset responses for each interaction
 
         for trace in response_data:
             if trace['type'] == 'speak' or trace['type'] == 'text':
@@ -47,7 +47,8 @@ class VoiceflowAPI:
                     button_payloads[str(idx + 1)] = choice['request']
             elif trace['type'] == 'end':
                 should_continue = False
-
+                
+        self.all_responses = all_responses  # Update stored responses
         return should_continue, button_payloads
 
     async def handle_user_input(self, conversation_id, user_input):

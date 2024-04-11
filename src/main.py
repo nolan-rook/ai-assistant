@@ -119,11 +119,16 @@ async def process_voiceflow_interaction(conversation_id, input_text, user_id, ch
         )
 
     responses = voiceflow.get_responses()
-    logging.info(f"Voiceflow responses: {responses}")
-
-    blocks, summary_text = create_message_blocks(responses, button_payloads)
-    return {"blocks": blocks, "summary_text": summary_text}
-
+    if responses:
+        for response in responses:
+            # Send each response as a separate message to Slack
+            await say(text=response, thread_ts=thread_ts)
+    
+    # After all individual messages have been sent, send the buttons if any
+    if button_payloads:
+        buttons_block = create_buttons_block(button_payloads)
+        await say(blocks=buttons_block, thread_ts=thread_ts)
+        
 def create_message_blocks(text_responses, button_payloads):
     blocks = []
     # Iterate through all text responses and add them to message blocks
