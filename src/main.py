@@ -152,7 +152,8 @@ async def process_message(event, say):
         await send_response()        
 
 @bolt_app.event("app_mention")
-async def handle_app_mention_events(event, say):
+def handle_app_mention_events(event, say, ack):
+    ack()
     logging.info(f"Received app_mention event: {event}")
     if event.get('user') == bot_user_id:
         return
@@ -164,18 +165,19 @@ async def handle_app_mention_events(event, say):
     # Mark this thread as an active conversation the bot is participating in
     conversations[thread_ts] = {'channel_id': channel_id, 'thread_ts': thread_ts}
 
-    # Process the mention message
-    await process_message(event, say)
+    # Process the mention message asynchronously
+    asyncio.create_task(process_message(event, say))
     
 @bolt_app.event("message")
-async def handle_message_events(event, say):
+def handle_message_events(event, say, ack):
+    ack()
     logging.info(f"Received message event: {event}")
     # Ignore messages from the bot itself to avoid loops
     if event.get('user') == bot_user_id:
         return
     
     if event.get('channel_type') == 'im':
-        await process_message(event, say)
+        asyncio.create_task(process_message(event, say))
 
     # Extract the necessary identifiers from the event
     thread_ts = event.get('thread_ts', event.get('ts'))
@@ -183,8 +185,8 @@ async def handle_message_events(event, say):
 
     # Check if the message is part of a thread that the bot is involved in
     if is_threaded and thread_ts in conversations:
-        # Process the message as part of the ongoing conversation
-        await process_message(event, say)
+        # Process the message as part of the ongoing conversation asynchronously
+        asyncio.create_task(process_message(event, say))
 
 @bolt_app.action(re.compile("voiceflow_button_"))
 def handle_voiceflow_button(ack, body, client, say, logger):
