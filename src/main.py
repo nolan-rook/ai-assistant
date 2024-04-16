@@ -152,7 +152,7 @@ async def process_message(event, say):
         await send_response()        
 
 @bolt_app.event("app_mention")
-def handle_app_mention_events(event, say):
+async def handle_app_mention_events(event, say):
     logging.info(f"Received app_mention event: {event}")
     if event.get('user') == bot_user_id:
         return
@@ -168,7 +168,7 @@ def handle_app_mention_events(event, say):
     await process_message(event, say)
     
 @bolt_app.event("message")
-def handle_message_events(event, say):
+async def handle_message_events(event, say):
     logging.info(f"Received message event: {event}")
     # Ignore messages from the bot itself to avoid loops
     if event.get('user') == bot_user_id:
