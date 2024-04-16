@@ -8,6 +8,59 @@ from bs4 import BeautifulSoup
 import re
 import os
 
+def create_message_blocks(text_responses, button_payloads):
+    blocks = []
+    summary_text = "Select an option:"
+    max_chars = 3000  # Maximum characters for a block of text
+
+    def split_text(text, max_length):
+        for start in range(0, len(text), max_length):
+            yield text[start:start + max_length]
+
+    for text in text_responses:
+        if len(text) <= max_chars:
+            blocks.append({"type": "divider"})
+            blocks.append({
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": text
+                }
+            })
+        else:
+            for chunk in split_text(text, max_chars):
+                blocks.append({"type": "divider"})
+                blocks.append({
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": chunk
+                    }
+                })
+
+    blocks.append({"type": "divider"})
+    buttons = []
+    for idx, (button_value, button_payload) in enumerate(button_payloads.items()):
+        button_text = button_payload['payload']['label']
+        buttons.append({
+            "type": "button",
+            "text": {
+                "type": "plain_text",
+                "text": button_text,
+                "emoji": True
+            },
+            "value": button_value,
+            "action_id": f"voiceflow_button_{idx}"
+        })
+
+    if buttons:
+        blocks.append({
+            "type": "actions",
+            "elements": buttons
+        })
+
+    return blocks, summary_text
+
 def download_file(file_url):
     headers = {'Authorization': f'Bearer {os.getenv("SLACK_BOT_TOKEN")}'}
     response = requests.get(file_url, headers=headers, allow_redirects=True)
@@ -19,7 +72,6 @@ def download_file(file_url):
     else:
         logging.error(f"Error downloading file: {response.status_code}, {response.text}")
         return None
-
 
 def extract_text_from_pdf(file_content):
     try:
