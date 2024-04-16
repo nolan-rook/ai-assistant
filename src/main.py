@@ -3,8 +3,8 @@ from fastapi import FastAPI, Request, Response, status
 from slack_bolt import App
 from slack_bolt.adapter.fastapi import SlackRequestHandler
 
-from voiceflow_api import VoiceflowAPI
-from utils import process_file, extract_webpage_content
+from src.voiceflow_api import VoiceflowAPI
+from src.utils import process_file, extract_webpage_content
 
 import re
 import os
