@@ -1,16 +1,14 @@
 from fastapi import FastAPI, Request, Response, status
-
-from slack_bolt import App
-from slack_bolt.adapter.fastapi import SlackRequestHandler
+from slack_bolt.async_app import AsyncApp
+from slack_bolt.adapter.fastapi.async_handler import AsyncSlackRequestHandler
 
 from src.voiceflow_api import VoiceflowAPI
 from src.utils import process_file, extract_webpage_content
 
 import re
 import os
-import random
-import time
 import asyncio
+import logging
 
 # Load environment variables
 from dotenv import load_dotenv
@@ -19,7 +17,7 @@ load_dotenv()
 import logging
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logging.getLogger('slack_bolt.App').setLevel(logging.ERROR)
+logging.getLogger('slack_bolt.AsyncApp').setLevel(logging.ERROR)
 
 slack_signing_secret = os.getenv("SLACK_SIGNING_SECRET")
 slack_bot_token = os.getenv("SLACK_BOT_TOKEN")
@@ -28,11 +26,11 @@ bot_user_id = os.getenv("SLACK_BOT_USER_ID")
 logging.info(f"Bot User ID from environment: {bot_user_id}")
 
 # Install the Slack app and get xoxb- token in advance
-bolt_app = App(token=slack_bot_token, signing_secret=slack_signing_secret)
+bolt_app = AsyncApp(token=slack_bot_token, signing_secret=slack_signing_secret)
 
 # FastAPI app to handle webhook routes
 app = FastAPI()
-slack_handler = SlackRequestHandler(bolt_app)
+slack_handler = AsyncSlackRequestHandler(bolt_app)
 
 # Initialize the Voiceflow API client
 voiceflow = VoiceflowAPI()
@@ -152,8 +150,7 @@ async def process_message(event, say):
         await send_response()        
 
 @bolt_app.event("app_mention")
-def handle_app_mention_events(event, say, ack):
-    ack()
+async def handle_app_mention_events(event, say):
     logging.info(f"Received app_mention event: {event}")
     if event.get('user') == bot_user_id:
         return
@@ -165,19 +162,18 @@ def handle_app_mention_events(event, say, ack):
     # Mark this thread as an active conversation the bot is participating in
     conversations[thread_ts] = {'channel_id': channel_id, 'thread_ts': thread_ts}
 
-    # Process the mention message asynchronously
-    asyncio.create_task(process_message(event, say))
+    # Process the mention message
+    await process_message(event, say)
     
 @bolt_app.event("message")
-def handle_message_events(event, say, ack):
-    ack()
+async def handle_message_events(event, say):
     logging.info(f"Received message event: {event}")
     # Ignore messages from the bot itself to avoid loops
     if event.get('user') == bot_user_id:
         return
     
     if event.get('channel_type') == 'im':
-        asyncio.create_task(process_message(event, say))
+        await process_message(event, say)
 
     # Extract the necessary identifiers from the event
     thread_ts = event.get('thread_ts', event.get('ts'))
@@ -185,12 +181,12 @@ def handle_message_events(event, say, ack):
 
     # Check if the message is part of a thread that the bot is involved in
     if is_threaded and thread_ts in conversations:
-        # Process the message as part of the ongoing conversation asynchronously
-        asyncio.create_task(process_message(event, say))
+        # Process the message as part of the ongoing conversation
+        await process_message(event, say)
 
 @bolt_app.action(re.compile("voiceflow_button_"))
-def handle_voiceflow_button(ack, body, client, say, logger):
-    ack()  # Acknowledge the action
+async def handle_voiceflow_button(ack, body, client, say, logger):
+    await ack()  # Acknowledge the action
     action_id = body['actions'][0]['action_id']
     user_id = body['user']['id']
     channel_id = body['channel']['id']
@@ -216,7 +212,7 @@ def handle_voiceflow_button(ack, body, client, say, logger):
             try:
                 original_blocks = body['message'].get('blocks', [])
                 updated_blocks = [block for block in original_blocks if block['type'] != 'actions']
-                client.chat_update(
+                await client.chat_update(
                     channel=channel_id,
                     ts=message_ts,
                     blocks=updated_blocks
@@ -227,17 +223,16 @@ def handle_voiceflow_button(ack, body, client, say, logger):
             # Send a new message reflecting the next stage in the conversation
             if is_running:
                 blocks, summary_text = create_message_blocks(voiceflow.get_responses(), new_button_payloads)
-                client.chat_postMessage(channel=channel_id, blocks=blocks, text=summary_text, thread_ts=thread_ts)
+                await client.chat_postMessage(channel=channel_id, blocks=blocks, text=summary_text, thread_ts=thread_ts)
                 
         else:
             # Respond in the correct thread if the choice wasn't understood
-            client.chat_postMessage(channel=channel_id, text="Sorry, I didn't understand that choice.", thread_ts=thread_ts)
+            await client.chat_postMessage(channel=channel_id, text="Sorry, I didn't understand that choice.", thread_ts=thread_ts)
     else:
         # Respond in the correct thread if no conversation was found
-        client.chat_postMessage(channel=channel_id, text="Sorry, I couldn't find your conversation.", thread_ts=thread_ts)
+        await client.chat_postMessage(channel=channel_id, text="Sorry, I couldn't find your conversation.", thread_ts=thread_ts)
 
-        
-def notify_user_completion(conversation_id, document_id):
+async def notify_user_completion(conversation_id, document_id):
     conversation_details = conversations.get(conversation_id)
     if conversation_details:
         channel_id = conversation_details['channel']
@@ -250,7 +245,7 @@ def notify_user_completion(conversation_id, document_id):
 
         # Use the correct Bolt app instance to send the message
         try:
-            bolt_app.client.chat_postMessage(
+            await bolt_app.client.chat_postMessage(
                 channel=channel_id, 
                 text=completion_message, 
                 thread_ts=thread_ts  # Ensure the message is sent as a reply in the thread
@@ -260,18 +255,17 @@ def notify_user_completion(conversation_id, document_id):
 
 # Correctly define the /task-completed endpoint within Flask app context
 @app.post("/task-completed")
-def task_completed():
-    data = request.json
+async def task_completed(request: Request):
+    data = await request.json()
     conversation_id = data.get('conversation_id')
     document_id = data.get('document_id')
     if conversation_id:
-        # Assuming you implement a way to notify users, for example:
-        notify_user_completion(conversation_id, document_id)
-        return jsonify({"status": "success"}), 200
+        await notify_user_completion(conversation_id, document_id)
+        return {"status": "success"}
     else:
-        return jsonify({"status": "error", "message": "Missing conversation_id"}), 400
-    
-def notify_user_start(conversation_id):
+        return {"status": "error", "message": "Missing conversation_id"}
+
+async def notify_user_start(conversation_id):
     conversation_details = conversations.get(conversation_id)
     if conversation_details:
         channel_id = conversation_details['channel']
@@ -282,7 +276,7 @@ def notify_user_start(conversation_id):
 
         # Use the correct Bolt app instance to send the message
         try:
-            bolt_app.client.chat_postMessage(
+            await bolt_app.client.chat_postMessage(
                 channel=channel_id, 
                 text=start_message, 
                 thread_ts=thread_ts  # Ensure the message is sent as a reply in the thread
@@ -291,11 +285,11 @@ def notify_user_start(conversation_id):
             logging.info(f"Error sending start notification: {e}")
 
 @app.post("/task-started")
-def task_started():
-    data = request.json
+async def task_started(request: Request):
+    data = await request.json()
     conversation_id = data.get('conversation_id')
     if conversation_id:
-        notify_user_start(conversation_id)
-        return jsonify({"status": "success", "message": "Task start notification sent"}), 200
+        await notify_user_start(conversation_id)
+        return {"status": "success", "message": "Task start notification sent"}
     else:
-        return jsonify({"status": "error", "message": "Missing conversation_id"}), 400
+        return {"status": "error", "message": "Missing conversation_id"}
