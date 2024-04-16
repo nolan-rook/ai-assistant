@@ -165,8 +165,8 @@ def handle_app_mention_events(event, say):
     conversations[thread_ts] = {'channel_id': channel_id, 'thread_ts': thread_ts}
 
     # Process the mention message
-    process_message(event, say)
-
+    await process_message(event, say)
+    
 @bolt_app.event("message")
 def handle_message_events(event, say):
     logging.info(f"Received message event: {event}")
@@ -175,7 +175,7 @@ def handle_message_events(event, say):
         return
     
     if event.get('channel_type') == 'im':
-        process_message(event, say)
+        await process_message(event, say)
 
     # Extract the necessary identifiers from the event
     thread_ts = event.get('thread_ts', event.get('ts'))
@@ -184,7 +184,7 @@ def handle_message_events(event, say):
     # Check if the message is part of a thread that the bot is involved in
     if is_threaded and thread_ts in conversations:
         # Process the message as part of the ongoing conversation
-        process_message(event, say)
+        await process_message(event, say)
 
 @bolt_app.action(re.compile("voiceflow_button_"))
 def handle_voiceflow_button(ack, body, client, say, logger):
