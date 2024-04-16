@@ -103,7 +103,7 @@ async def process_message(event, say):
 
     logging.info(f"Processing message from user {user_id} in channel {channel_id}, thread {thread_ts}")
     
-    async def send_response():
+    async def send_response(user_input):
         if 'app_mention' in event['type']:
             user_input = re.sub(r"<@U[A-Z0-9]+>", "", user_input, count=1).strip()
 
@@ -144,10 +144,10 @@ async def process_message(event, say):
         logging.info(f"Sending blocks: {blocks}, summary_text: {summary_text}, thread_ts: {thread_ts}")
         await say(blocks=blocks, text=summary_text, thread_ts=thread_ts)      
     try:
-        await asyncio.wait_for(send_response(), timeout=5)
+        await asyncio.wait_for(send_response(user_input), timeout=5)
     except asyncio.TimeoutError:
         await say(text="Just a moment...", thread_ts=thread_ts)
-        await send_response()        
+        await send_response(user_input)   
 
 @bolt_app.event("app_mention")
 async def handle_app_mention_events(event, say):
