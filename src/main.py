@@ -53,10 +53,6 @@ bolt_app = AsyncApp(token=slack_bot_token, signing_secret=slack_signing_secret)
 # Initialize the FastAPI app
 app = FastAPI(lifespan=app_lifespan)
 
-async def send_delayed_message(say, delay, thread_ts, message="Just a moment..."):
-    await asyncio.sleep(delay)
-    await say(text=message, thread_ts=thread_ts)
-
 def create_message_blocks(text_responses, button_payloads):
     blocks = []
     summary_text = "Select an option:"  # Fallback text for notifications
@@ -123,8 +119,7 @@ async def process_message(event, say):
 
     logging.info(f"Processing message from user {user_id} in channel {channel_id}, thread {thread_ts}")
 
-    background_tasks = BackgroundTasks()
-    background_tasks.add_task(send_delayed_message, say, 5, thread_ts)
+    ## await asyncio.sleep(5)  # Introduce a delay of 5 seconds
 
     if 'app_mention' in event['type']:
         user_input = re.sub(r"<@U[A-Z0-9]+>", "", user_input, count=1).strip()
@@ -158,8 +153,6 @@ async def process_message(event, say):
                 combined_input += "\n" + webpage_text
         except Exception as e:
             logging.error(f"Error reading URL {url}: {str(e)}")
-            # Optionally, you could append a message indicating the URL was skipped
-            combined_input += "\n[Note: A URL was not loaded properly and has been skipped.]"
 
     print(combined_input)  # For debugging
 
@@ -249,11 +242,9 @@ async def handle_voiceflow_button(ack, body, client, say, logger):
 
     conversation = await database.fetch_one("SELECT * FROM conversations WHERE conversation_id = :conversation_id", values={"conversation_id": conversation_id})
     if conversation:
-        # Get the button_payloads field from the conversation object
-        button_payloads_json = conversation.button_payloads
+        button_payloads_json = conversation.button_payloads  # Get the button_payloads directly from the conversation object
 
         if button_payloads_json:
-            # Parse the JSON string back into a dictionary
             button_payloads = json.loads(button_payloads_json)
             button_payload = button_payloads.get(str(button_index + 1))
 
@@ -265,6 +256,7 @@ async def handle_voiceflow_button(ack, body, client, say, logger):
                 new_button_payloads_json = json.dumps(new_button_payloads)
 
                 # Update the conversation in the database with the new button payloads
+                
                 await database.execute("""
                     UPDATE conversations
                     SET button_payloads = :button_payloads
@@ -321,7 +313,7 @@ async def notify_user_completion(conversation_id, document_id):
             print(f"Error sending completion notification: {e}")
 
 @app.post("/task-completed")
-async def task_completed(data: Dict):
+def task_completed(data: Dict):
     conversation_id = data.get('conversation_id')
     document_id = data.get('document_id')
     if conversation_id:
@@ -348,7 +340,7 @@ async def notify_user_start(conversation_id):
             print(f"Error sending start notification: {e}")
 
 @app.post("/task-started")
-async def task_started(data: Dict):
+def task_started(data: Dict):
     conversation_id = data.get('conversation_id')
     if conversation_id:
         await notify_user_start(conversation_id)
