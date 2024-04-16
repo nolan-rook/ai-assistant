@@ -61,7 +61,6 @@ def create_message_blocks(text_responses, button_payloads):
 
     return blocks, summary_text
 
-
 def download_file(file_url):
     headers = {'Authorization': f'Bearer {os.getenv("SLACK_BOT_TOKEN")}'}
     response = requests.get(file_url, headers=headers, allow_redirects=True)
@@ -73,7 +72,6 @@ def download_file(file_url):
     else:
         logging.error(f"Error downloading file: {response.status_code}, {response.text}")
         return None
-
 
 def extract_text_from_pdf(file_content):
     try:

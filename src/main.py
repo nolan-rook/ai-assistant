@@ -17,11 +17,6 @@ load_dotenv()
 import psycopg2
 from psycopg2.extras import Json
 
-# Database connection function
-def get_db_connection():
-    conn = psycopg2.connect(database_url)
-    return conn
-
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.getLogger('slack_bolt.AsyncApp').setLevel(logging.ERROR)
 
@@ -29,6 +24,11 @@ slack_signing_secret = os.getenv("SLACK_SIGNING_SECRET")
 slack_bot_token = os.getenv("SLACK_BOT_TOKEN")
 bot_user_id = os.getenv("SLACK_BOT_USER_ID")
 database_url = os.getenv("DATABASE_URL")
+
+# Database connection function
+def get_db_connection():
+    conn = psycopg2.connect(database_url)
+    return conn
 
 logging.info(f"Bot User ID from environment: {bot_user_id}")
 
@@ -41,6 +41,10 @@ slack_handler = AsyncSlackRequestHandler(bolt_app)
 
 # Initialize the Voiceflow API client
 voiceflow = VoiceflowAPI()
+
+@app.post("/slack/events")
+async def slack_events(request: Request):
+    return await slack_handler.handle(request)
 
 @app.post("/slack/events")
 async def slack_events(request: Request):
