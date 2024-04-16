@@ -339,6 +339,16 @@ async def notify_user_start(conversation_id):
         except Exception as e:
             print(f"Error sending start notification: {e}")
 
+@app.post("/task-completed")
+async def task_completed(data: Dict):
+    conversation_id = data.get('conversation_id')
+    document_id = data.get('document_id')
+    if conversation_id:
+        await notify_user_completion(conversation_id, document_id)
+        return {"status": "success"}
+    else:
+        return {"status": "error", "message": "Missing conversation_id"}
+
 @app.post("/task-started")
 def task_started(data: Dict):
     conversation_id = data.get('conversation_id')
