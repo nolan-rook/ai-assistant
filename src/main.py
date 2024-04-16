@@ -350,7 +350,7 @@ async def task_completed(data: Dict):
         return {"status": "error", "message": "Missing conversation_id"}
 
 @app.post("/task-started")
-def task_started(data: Dict):
+async def task_started(data: Dict):
     conversation_id = data.get('conversation_id')
     if conversation_id:
         await notify_user_start(conversation_id)
