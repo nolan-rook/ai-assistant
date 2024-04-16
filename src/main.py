@@ -141,16 +141,16 @@ async def process_message(event, say):
             if file_url:
                 file_text = process_file(file_url, file_type)
                 if file_text:
-                    combined_input +=n" + file_text
+                    combined_input += "\n" + file_text
     # Extract URLs and remove the enclosing angle brackets
-    urls = re.findall(r'<http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*(-9a-fA-F][0-9a-fA-F]))+[^>),s]*>', user_input)
+    urls = re.findall(r'<http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+[^>),\s]*>', user_input)
     for url in urls:
         # Remove the angle brackets from each URL
         url = url[1:-1]
         try:
             webpage_text = extract_webpage_content(url)
             if webpage_text:
-                combined_input +=n" + webpage_text
+                combined_input += "\n" + webpage_text
         except Exception as e:
             logging.error(f"Error reading URL {url}: {str(e)}")
 
@@ -252,8 +252,11 @@ async def handle_voiceflow_button(ack, body, client, say, logger):
                 # Process the button action to advance the conversation
                 is_running, new_button_payloads = await voiceflow.handle_user_input(conversation_id, button_payload)
 
-                # Update the conversation in the database with the new button payloads
+                # Convert the new button payloads to JSON string
                 new_button_payloads_json = json.dumps(new_button_payloads)
+
+                # Update the conversation in the database with the new button payloads
+                
                 await database.execute("""
                     UPDATE conversations
                     SET button_payloads = :button_payloads
