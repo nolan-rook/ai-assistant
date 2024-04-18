@@ -61,9 +61,3 @@ class VoiceflowAPI:
     def get_responses(self):
         """Return all text/speak responses from the current interaction with Voiceflow."""
         return self.all_responses
-
-    def handle_button_input(self, button_text):
-        """Handles the interaction with Voiceflow when a button is pressed."""
-        # Construct the payload expected by Voiceflow for a button press
-        button_payload = {'type': 'text', 'payload': button_text}
-        return self.interact(button_payload)

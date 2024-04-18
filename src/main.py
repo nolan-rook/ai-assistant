@@ -17,6 +17,11 @@ load_dotenv()
 import psycopg2
 from psycopg2.extras import Json
 
+from cachetools import TTLCache
+
+# Initialize a cache with a time-to-live (TTL) of 60 seconds
+processed_events = TTLCache(maxsize=1000, ttl=60)
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.getLogger('slack_bolt.AsyncApp').setLevel(logging.ERROR)
 
@@ -119,7 +124,8 @@ async def process_message(event, say):
         await say(text="An error occurred while processing your request.", thread_ts=thread_ts)
 
 @bolt_app.event("app_mention")
-async def handle_app_mention_events(event, say):
+async def handle_app_mention_events(event, ack, say):
+    await ack()
     logging.info(f"Received app_mention event: {event}")
     if event.get('user') == bot_user_id:
         return
@@ -128,7 +134,8 @@ async def handle_app_mention_events(event, say):
     await process_message(event, say)
     
 @bolt_app.event("message")
-async def handle_message_events(event, say):
+async def handle_message_events(event, ack, say):
+    await ack()
     logging.info(f"Received message event: {event}")
     # Ignore messages from the bot itself to avoid loops
     if event.get('user') == bot_user_id:
