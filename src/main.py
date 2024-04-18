@@ -124,9 +124,12 @@ async def process_message(event, say):
         await say(text="An error occurred while processing your request.", thread_ts=thread_ts)
 
 @bolt_app.event("app_mention")
-async def handle_app_mention_events(event, ack, say):
-    await ack()
-    logging.info(f"Received app_mention event: {event}")
+async def handle_app_mention_events(event, say):
+    event_id = hashlib.sha256(f"{event['user']}-{event['channel']}-{event['ts']}".encode()).hexdigest()
+    if event_id in processed_events:
+        return
+
+    processed_events[event_id] = True
     if event.get('user') == bot_user_id:
         return
 
@@ -134,9 +137,12 @@ async def handle_app_mention_events(event, ack, say):
     await process_message(event, say)
     
 @bolt_app.event("message")
-async def handle_message_events(event, ack, say):
-    await ack()
-    logging.info(f"Received message event: {event}")
+async def handle_message_events(event, say):
+    event_id = hashlib.sha256(f"{event['user']}-{event['channel']}-{event['ts']}".encode()).hexdigest()
+    if event_id in processed_events:
+        return
+
+    processed_events[event_id] = True
     # Ignore messages from the bot itself to avoid loops
     if event.get('user') == bot_user_id:
         return
