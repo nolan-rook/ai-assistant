@@ -18,6 +18,7 @@ import psycopg2
 from psycopg2.extras import Json
 
 from cachetools import TTLCache
+import hashlib
 
 # Initialize a cache with a time-to-live (TTL) of 60 seconds
 processed_events = TTLCache(maxsize=1000, ttl=60)
