@@ -46,10 +46,6 @@ voiceflow = VoiceflowAPI()
 async def slack_events(request: Request):
     return await slack_handler.handle(request)
 
-@app.post("/slack/events")
-async def slack_events(request: Request):
-    return await slack_handler.handle(request)
-
 async def process_message(event, say):
     user_id = event.get('user')
     channel_id = event.get('channel')
