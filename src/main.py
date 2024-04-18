@@ -134,8 +134,9 @@ async def handle_app_mention_events(event, say):
     if event.get('user') == bot_user_id:
         return
 
-    # Process the mention message
-    await process_message(event, say)
+    # Check if the event has already been processed by handle_message_events
+    if event.get('channel_type') != 'im' and not bool(event.get('thread_ts')):
+        await process_message(event, say)
     
 @bolt_app.event("message")
 async def handle_message_events(event, say):
@@ -150,24 +151,24 @@ async def handle_message_events(event, say):
     
     if event.get('channel_type') == 'im':
         await process_message(event, say)
+    else:
+        # Extract the necessary identifiers from the event
+        thread_ts = event.get('thread_ts', event.get('ts'))
+        is_threaded = bool(event.get('thread_ts'))
+        channel_id = event.get('channel')
 
-    # Extract the necessary identifiers from the event
-    thread_ts = event.get('thread_ts', event.get('ts'))
-    is_threaded = bool(event.get('thread_ts'))
-    channel_id = event.get('channel')
+        # Check if the message is part of a thread that the bot is involved in
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT 1 FROM conversations WHERE conversation_id = %s",
+                    (f"{channel_id}-{thread_ts}",)
+                )
+                conversation_exists = cur.fetchone()
 
-    # Check if the message is part of a thread that the bot is involved in
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT 1 FROM conversations WHERE conversation_id = %s",
-                (f"{channel_id}-{thread_ts}",)
-            )
-            conversation_exists = cur.fetchone()
-
-    if is_threaded and conversation_exists:
-        # Process the message as part of the ongoing conversation
-        await process_message(event, say)
+        if is_threaded and conversation_exists:
+            # Process the message as part of the ongoing conversation
+            await process_message(event, say)
 
 @bolt_app.action(re.compile("voiceflow_button_"))
 async def handle_voiceflow_button(ack, body, client, say, logger):
