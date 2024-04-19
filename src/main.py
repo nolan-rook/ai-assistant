@@ -52,13 +52,6 @@ voiceflow = VoiceflowAPI()
 async def slack_events(request: Request):
     return await slack_handler.handle(request)
 
-async def send_delayed_message(say, thread_ts, delay=5, message="Just a moment..."):
-    try:
-        await asyncio.sleep(delay)
-        await say(text=message, thread_ts=thread_ts)
-    except asyncio.CancelledError:
-        pass
-    
 async def process_message(event, say):
     user_id = event.get('user')
     channel_id = event.get('channel')
@@ -126,12 +119,7 @@ async def process_message(event, say):
         logging.info(f"Sending blocks: {blocks}, summary_text: {summary_text}, thread_ts: {thread_ts}")
         await say(blocks=blocks, text=summary_text, thread_ts=thread_ts)      
     try:
-        delayed_message_task = asyncio.create_task(send_delayed_message(say, thread_ts))
-        try:
-            await asyncio.wait_for(send_response(user_input), timeout=5)
-        except asyncio.TimeoutError:
-            pass
-        delayed_message_task.cancel()
+        await send_response(user_input)  
     except Exception as e:
         logging.error(f"Error processing message: {e}")
         await say(text="An error occurred while processing your request.", thread_ts=thread_ts)
