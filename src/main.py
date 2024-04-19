@@ -52,89 +52,86 @@ voiceflow = VoiceflowAPI()
 async def slack_events(request: Request):
     return await slack_handler.handle(request)
 
-async def delayed_message(say, thread_ts, delay=5, message="Just a moment..."):
-    await asyncio.sleep(delay)
-    await say(text=message, thread_ts=thread_ts)
-
+async def send_delayed_message(say, thread_ts, delay=5, message="Just a moment..."):
+    try:
+        await asyncio.sleep(delay)
+        await say(text=message, thread_ts=thread_ts)
+    except asyncio.CancelledError:
+        pass
+    
 async def process_message(event, say):
     user_id = event.get('user')
     channel_id = event.get('channel')
     thread_ts = event.get('thread_ts', event['ts'])
     user_input = event.get('text', '').strip()
 
-    # Extract the first few words from user_input for logging
-    preview_length = 5  # Number of words to log
-    words_preview = ' '.join(user_input.split()[:preview_length])
+    logging.info(f"Processing message from user {user_id} in channel {channel_id}, thread {thread_ts}")
     
-    logging.info(f"Processing message from user {user_id} in channel {channel_id}, thread {thread_ts}. Input starts with: '{words_preview}'")
-    
-    # Set up the delayed message task
-    delayed_task = asyncio.create_task(delayed_message(say, thread_ts))
-
     async def send_response(user_input):
-        try:
-            if 'app_mention' in event['type']:
-                user_input = re.sub(r"<@U[A-Z0-9]+>", "", user_input, count=1).strip()
+        if 'app_mention' in event['type']:
+            user_input = re.sub(r"<@U[A-Z0-9]+>", "", user_input, count=1).strip()
 
-            conversation_id = f"{channel_id}-{thread_ts}"
-            logging.info(f"Processing in conversation {conversation_id}")
+        conversation_id = f"{channel_id}-{thread_ts}"
+        logging.info(f"Processing in conversation {conversation_id}")
 
-            combined_input = user_input
-            files = event.get('files', [])
+        combined_input = user_input
+        files = event.get('files', [])
 
-            if files:
-                for file_info in files:
-                    file_url = file_info.get('url_private_download')
-                    file_type = file_info.get('filetype')
-                    if file_url:
-                        file_text = process_file(file_url, file_type)
-                        if file_text:
-                            combined_input += "\n" + file_text
+        if files:
+            for file_info in files:
+                file_url = file_info.get('url_private_download')
+                file_type = file_info.get('filetype')
+                if file_url:
+                    file_text = process_file(file_url, file_type)
+                    if file_text:
+                        combined_input += "\n" + file_text
 
-            urls = re.findall(r'<http[s]?://[^>]+>', user_input)
-            for url in urls:
-                url = url[1:-1]  # Strip angle brackets
-                try:
-                    webpage_text = extract_webpage_content(url)
-                    if webpage_text:
-                        combined_input += "\n" + webpage_text
-                except Exception as e:
-                    logging.error(f"Error reading URL {url}: {str(e)}")
-                    combined_input += "\n[Note: A URL was not loaded properly and has been skipped.]"
+        urls = re.findall(r'<http[s]?://[^>]+>', user_input)
+        for url in urls:
+            url = url[1:-1]  # Strip angle brackets
+            try:
+                webpage_text = extract_webpage_content(url)
+                if webpage_text:
+                    combined_input += "\n" + webpage_text
+            except Exception as e:
+                logging.error(f"Error reading URL {url}: {str(e)}")
+                combined_input += "\n[Note: A URL was not loaded properly and has been skipped.]"
 
-            # Database interaction to fetch or create conversation
-            with get_db_connection() as conn:
-                with conn.cursor() as cur:
+        # Database interaction to fetch or create conversation
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT button_payloads FROM conversations WHERE conversation_id = %s",
+                    (conversation_id,)
+                )
+                existing_conversation = cur.fetchone()
+
+                if existing_conversation:
+                    button_payloads = existing_conversation[0]
+                    is_running, button_payloads = voiceflow.handle_user_input(conversation_id, combined_input)
                     cur.execute(
-                        "SELECT button_payloads FROM conversations WHERE conversation_id = %s",
-                        (conversation_id,)
+                        "UPDATE conversations SET button_payloads = %s WHERE conversation_id = %s",
+                        (Json(button_payloads), conversation_id)
                     )
-                    existing_conversation = cur.fetchone()
-
-                    if existing_conversation:
-                        button_payloads = existing_conversation[0]
+                else:
+                    is_running, button_payloads = voiceflow.handle_user_input(conversation_id, {'type': 'launch'})
+                    if is_running:
                         is_running, button_payloads = voiceflow.handle_user_input(conversation_id, combined_input)
-                        cur.execute(
-                            "UPDATE conversations SET button_payloads = %s WHERE conversation_id = %s",
-                            (Json(button_payloads), conversation_id)
-                        )
-                    else:
-                        is_running, button_payloads = voiceflow.handle_user_input(conversation_id, {'type': 'launch'})
-                        if is_running:
-                            is_running, button_payloads = voiceflow.handle_user_input(conversation_id, combined_input)
-                        cur.execute(
-                            "INSERT INTO conversations (conversation_id, user_id, channel_id, thread_ts, button_payloads) VALUES (%s, %s, %s, %s, %s)",
-                            (conversation_id, user_id, channel_id, thread_ts, Json(button_payloads))
-                        )
+                    cur.execute(
+                        "INSERT INTO conversations (conversation_id, user_id, channel_id, thread_ts, button_payloads) VALUES (%s, %s, %s, %s, %s)",
+                        (conversation_id, user_id, channel_id, thread_ts, Json(button_payloads))
+                    )
 
-            blocks, summary_text = create_message_blocks(voiceflow.get_responses(), button_payloads)
-            logging.info(f"Sending blocks: {blocks}, summary_text: {summary_text}, thread_ts: {thread_ts}")
-            await say(blocks=blocks, text=summary_text, thread_ts=thread_ts)      
-        finally:
-            # Cancel the delayed message as soon as the main response is ready
-            delayed_task.cancel()
+        blocks, summary_text = create_message_blocks(voiceflow.get_responses(), button_payloads)
+        logging.info(f"Sending blocks: {blocks}, summary_text: {summary_text}, thread_ts: {thread_ts}")
+        await say(blocks=blocks, text=summary_text, thread_ts=thread_ts)      
     try:
-        await send_response(user_input)  
+        delayed_message_task = asyncio.create_task(send_delayed_message(say, thread_ts))
+        try:
+            await asyncio.wait_for(send_response(user_input), timeout=5)
+        except asyncio.TimeoutError:
+            pass
+        delayed_message_task.cancel()
     except Exception as e:
         logging.error(f"Error processing message: {e}")
         await say(text="An error occurred while processing your request.", thread_ts=thread_ts)
