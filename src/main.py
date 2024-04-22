@@ -58,18 +58,18 @@ async def process_message(event, say):
     thread_ts = event.get('thread_ts', event['ts'])
     user_input = event.get('text', '').strip()
 
-    logging.info(f"Starting message processing for user {user_id} in channel {channel_id} on thread {thread_ts}")
-
+    logging.info(f"Processing message from user {user_id} in channel {channel_id}, thread {thread_ts}")
+    
     async def send_response(user_input):
-        logging.info("Preparing to process user input.")
         if 'app_mention' in event['type']:
             user_input = re.sub(r"<@U[A-Z0-9]+>", "", user_input, count=1).strip()
 
         conversation_id = f"{channel_id}-{thread_ts}"
-        logging.info(f"Processing input for conversation ID: {conversation_id}")
+        logging.info(f"Processing in conversation {conversation_id}")
 
         combined_input = user_input
         files = event.get('files', [])
+
         if files:
             for file_info in files:
                 file_url = file_info.get('url_private_download')
@@ -77,7 +77,7 @@ async def process_message(event, say):
                 if file_url:
                     file_text = process_file(file_url, file_type)
                     if file_text:
-                        combined_input += "\n" + file_text
+                        combined_input +="\n" + file_text
 
         urls = re.findall(r'<http[s]?://[^>]+>', user_input)
         for url in urls:
@@ -85,11 +85,12 @@ async def process_message(event, say):
             try:
                 webpage_text = extract_webpage_content(url)
                 if webpage_text:
-                    combined_input += "\n" + webpage_text
+                    combined_input +="\n" + webpage_text
             except Exception as e:
                 logging.error(f"Error reading URL {url}: {str(e)}")
                 combined_input += "\n[Note: A URL was not loaded properly and has been skipped.]"
-
+                
+        # Database interaction to fetch or create conversation
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -100,39 +101,39 @@ async def process_message(event, say):
 
                 if existing_conversation:
                     button_payloads = existing_conversation[0]
-                    is_running, button_payloads = voiceflow.handle_user_input(conversation_id, combined_input)
+                    try:
+                        is_running, button_payloads = await asyncio.wait_for(asyncio.shield(voiceflow.handle_user_input(conversation_id, combined_input)), timeout=5.0)
+                    except asyncio.TimeoutError:
+                        await say(text="Just a moment...", thread_ts=thread_ts)
+                        is_running, button_payloads = await voiceflow.handle_user_input(conversation_id, combined_input)
                     cur.execute(
                         "UPDATE conversations SET button_payloads = %s WHERE conversation_id = %s",
                         (Json(button_payloads), conversation_id)
                     )
                 else:
-                    is_running, button_payloads = voiceflow.handle_user_input(conversation_id, {'type': 'launch'})
-                    if is_running:
-                        is_running, button_payloads = voiceflow.handle_user_input(conversation_id, combined_input)
+                    try:
+                        is_running, button_payloads = await asyncio.wait_for(asyncio.shield(voiceflow.handle_user_input(conversation_id, {'type': 'launch'})), timeout=5.0)
+                        if is_running:
+                            is_running, button_payloads = await asyncio.wait_for(asyncio.shield(voiceflow.handle_user_input(conversation_id, combined_input)), timeout=5.0)
+                    except asyncio.TimeoutError:
+                        await say(text="Just a moment...", thread_ts=thread_ts)
+                        is_running, button_payloads = await voiceflow.handle_user_input(conversation_id, {'type': 'launch'})
+                        if is_running:
+                            is_running, button_payloads = await voiceflow.handle_user_input(conversation_id, combined_input)
                     cur.execute(
                         "INSERT INTO conversations (conversation_id, user_id, channel_id, thread_ts, button_payloads) VALUES (%s, %s, %s, %s, %s)",
                         (conversation_id, user_id, channel_id, thread_ts, Json(button_payloads))
                     )
 
         blocks, summary_text = create_message_blocks(voiceflow.get_responses(), button_payloads)
-        logging.info("Message blocks created, sending response to channel.")
+        logging.info(f"Sending blocks: {blocks}, summary_text: {summary_text}, thread_ts: {thread_ts}")
         await say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
-
-    async def timer_message():
-        logging.info("Timer started, will check again in 5 seconds.")
-        await asyncio.sleep(5)
-        if not response_completed.is_set():
-            logging.info("5 seconds have passed without completing response, sending interim message.")
-            await say(text="Just a moment...", thread_ts=thread_ts)
-
-    response_completed = asyncio.Event()
-    timer_task = asyncio.create_task(timer_message())
-    response_task = asyncio.create_task(send_response(user_input))
-
-    await response_task
-    response_completed.set()
-    timer_task.cancel()
-    logging.info("Response task completed, event set and timer task canceled.")
+    
+    try:
+        await send_response(user_input)
+    except Exception as e:
+        logging.error(f"Error processing message: {e}")
+        await say(text="An error occurred while processing your request.", thread_ts=thread_ts)
 
 @bolt_app.event("app_mention")
 async def handle_app_mention_events(event, say):
