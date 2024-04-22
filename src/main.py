@@ -102,24 +102,24 @@ async def process_message(event, say):
                 if existing_conversation:
                     button_payloads = existing_conversation[0]
                     try:
-                        is_running, button_payloads = await asyncio.wait_for(asyncio.shield(voiceflow.handle_user_input(conversation_id, combined_input)), timeout=5.0)
+                        is_running, button_payloads = await asyncio.wait_for(asyncio.to_thread(voiceflow.handle_user_input, conversation_id, combined_input), timeout=5.0)
                     except asyncio.TimeoutError:
                         await say(text="Just a moment...", thread_ts=thread_ts)
-                        is_running, button_payloads = await voiceflow.handle_user_input(conversation_id, combined_input)
+                        is_running, button_payloads = await asyncio.to_thread(voiceflow.handle_user_input, conversation_id, combined_input)
                     cur.execute(
                         "UPDATE conversations SET button_payloads = %s WHERE conversation_id = %s",
                         (Json(button_payloads), conversation_id)
                     )
                 else:
                     try:
-                        is_running, button_payloads = await asyncio.wait_for(asyncio.shield(voiceflow.handle_user_input(conversation_id, {'type': 'launch'})), timeout=5.0)
+                        is_running, button_payloads = await asyncio.wait_for(asyncio.to_thread(voiceflow.handle_user_input, conversation_id, {'type': 'launch'}), timeout=5.0)
                         if is_running:
-                            is_running, button_payloads = await asyncio.wait_for(asyncio.shield(voiceflow.handle_user_input(conversation_id, combined_input)), timeout=5.0)
+                            is_running, button_payloads = await asyncio.wait_for(asyncio.to_thread(voiceflow.handle_user_input, conversation_id, combined_input), timeout=5.0)
                     except asyncio.TimeoutError:
                         await say(text="Just a moment...", thread_ts=thread_ts)
-                        is_running, button_payloads = await voiceflow.handle_user_input(conversation_id, {'type': 'launch'})
+                        is_running, button_payloads = await asyncio.to_thread(voiceflow.handle_user_input, conversation_id, {'type': 'launch'})
                         if is_running:
-                            is_running, button_payloads = await voiceflow.handle_user_input(conversation_id, combined_input)
+                            is_running, button_payloads = await asyncio.to_thread(voiceflow.handle_user_input, conversation_id, combined_input)
                     cur.execute(
                         "INSERT INTO conversations (conversation_id, user_id, channel_id, thread_ts, button_payloads) VALUES (%s, %s, %s, %s, %s)",
                         (conversation_id, user_id, channel_id, thread_ts, Json(button_payloads))
