@@ -211,7 +211,7 @@ async def handle_voiceflow_button(ack, body, client, say, logger):
 
                 if button_payload:
                     # Process the button action to advance the conversation
-                    is_running, new_button_payloads = voiceflow.handle_user_input(conversation_id, button_payload)
+                    is_running, new_button_payloads = await voiceflow.handle_user_input(conversation_id, button_payload)
                     cur.execute(
                         "UPDATE conversations SET button_payloads = %s WHERE conversation_id = %s",
                         (Json(new_button_payloads), conversation_id)
