@@ -60,13 +60,20 @@ async def process_message(event, say):
 
     logging.info(f"Starting message processing for user {user_id} in channel {channel_id} on thread {thread_ts}")
 
-    async def send_delayed_response():
-        await asyncio.sleep(5)
-        if response_task.done():
-            logging.info("Main task completed, no need for interim message.")
-        else:
-            logging.info("5 seconds passed, main task not completed, sending 'just a moment...' message.")
+    async def send_response_with_delay(user_input):
+        try:
+            # Start the response task
+            response = send_response(user_input)
+            # This will either complete the response in time or send a delayed message after 5 seconds
+            response_task = asyncio.wait_for(asyncio.create_task(response), timeout=5)
+            blocks, summary_text = await response_task
+        except asyncio.TimeoutError:
+            # If the response takes longer than 5 seconds, send a "just a moment..." message
+            logging.info("Response delayed beyond 5 seconds, sending 'just a moment...' message.")
             await say(text="Just a moment...", thread_ts=thread_ts)
+            # Now wait for the response to complete without the timeout
+            blocks, summary_text = await response  # Continue from where it left off
+        return blocks, summary_text
 
     async def send_response(user_input):
         logging.info("Preparing to process user input.")
@@ -86,7 +93,6 @@ async def process_message(event, say):
                     file_text = process_file(file_url, file_type)
                     if file_text:
                         combined_input += "\n" + file_text
-                        logging.info("Added file text to input.")
 
         urls = re.findall(r'<http[s]?://[^>]+>', user_input)
         for url in urls:
@@ -95,7 +101,6 @@ async def process_message(event, say):
                 webpage_text = extract_webpage_content(url)
                 if webpage_text:
                     combined_input += "\n" + webpage_text
-                    logging.info(f"Added webpage content from {url} to input.")
             except Exception as e:
                 logging.error(f"Error reading URL {url}: {str(e)}")
                 combined_input += "\n[Note: A URL was not loaded properly and has been skipped.]"
@@ -129,18 +134,9 @@ async def process_message(event, say):
         logging.info(f"Message blocks created, concluding response task.")
         return blocks, summary_text
 
-    response_task = asyncio.create_task(send_response(user_input))
-    delayed_task = asyncio.create_task(send_delayed_response())
-
-    try:
-        blocks, summary_text = await response_task
-        delayed_task.cancel()
-        logging.info("Main response task completed, sending final response.")
-        await say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
-    except Exception as e:
-        logging.error(f"Error processing message: {e}")
-        await say(text="An error occurred while processing your request.", thread_ts=thread_ts)
-        delayed_task.cancel()  # Ensure the delayed task is canceled even if an error occurs
+    blocks, summary_text = await send_response_with_delay(user_input)
+    logging.info("Final response being sent.")
+    await say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
 
 @bolt_app.event("app_mention")
 async def handle_app_mention_events(event, say):
