@@ -119,6 +119,7 @@ async def process_message(event, say):
         await say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
 
     async def timer_message():
+        logging.info("Timer started, will check again in 5 seconds.")
         await asyncio.sleep(5)
         if not response_completed.is_set():
             logging.info("5 seconds have passed without completing response, sending interim message.")
