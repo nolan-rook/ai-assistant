@@ -60,21 +60,6 @@ async def process_message(event, say):
 
     logging.info(f"Starting message processing for user {user_id} in channel {channel_id} on thread {thread_ts}")
 
-    async def send_response_with_delay(user_input):
-        try:
-            # Start the response task
-            response = send_response(user_input)
-            # This will either complete the response in time or send a delayed message after 5 seconds
-            response_task = asyncio.wait_for(asyncio.create_task(response), timeout=5)
-            blocks, summary_text = await response_task
-        except asyncio.TimeoutError:
-            # If the response takes longer than 5 seconds, send a "just a moment..." message
-            logging.info("Response delayed beyond 5 seconds, sending 'just a moment...' message.")
-            await say(text="Just a moment...", thread_ts=thread_ts)
-            # Now wait for the response to complete without the timeout
-            blocks, summary_text = await response  # Continue from where it left off
-        return blocks, summary_text
-
     async def send_response(user_input):
         logging.info("Preparing to process user input.")
         if 'app_mention' in event['type']:
@@ -105,7 +90,6 @@ async def process_message(event, say):
                 logging.error(f"Error reading URL {url}: {str(e)}")
                 combined_input += "\n[Note: A URL was not loaded properly and has been skipped.]"
 
-        logging.info("Input combined, fetching conversation details from database.")
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -131,12 +115,23 @@ async def process_message(event, say):
                     )
 
         blocks, summary_text = create_message_blocks(voiceflow.get_responses(), button_payloads)
-        logging.info(f"Message blocks created, concluding response task.")
-        return blocks, summary_text
+        logging.info("Message blocks created, sending response to channel.")
+        await say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
 
-    blocks, summary_text = await send_response_with_delay(user_input)
-    logging.info("Final response being sent.")
-    await say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
+    async def timer_message():
+        await asyncio.sleep(5)
+        if not response_completed.is_set():
+            logging.info("5 seconds have passed without completing response, sending interim message.")
+            await say(text="Just a moment...", thread_ts=thread_ts)
+
+    response_completed = asyncio.Event()
+    timer_task = asyncio.create_task(timer_message())
+    response_task = asyncio.create_task(send_response(user_input))
+
+    await response_task
+    response_completed.set()
+    timer_task.cancel()
+    logging.info("Response task completed, event set and timer task canceled.")
 
 @bolt_app.event("app_mention")
 async def handle_app_mention_events(event, say):
