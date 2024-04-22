@@ -1,4 +1,4 @@
-import requests
+import aiohttp
 import os
 from dotenv import load_dotenv
 
@@ -15,16 +15,17 @@ class VoiceflowAPI:
         self.last_message = None
         self.all_responses = []
 
-    def interact(self, conversation_id, request):
+    async def interact(self, conversation_id, request):
         """Interact with the Voiceflow API and handle the response."""
-        response = requests.post(
-            url=f"{self.runtime_endpoint}/state/{self.version_id}/user/{conversation_id}/interact",
-            json={'request': request},
-            headers={'Authorization': self.api_key},
-        )
-        response.raise_for_status()  # Raise an exception for HTTP errors
-        self.all_responses = []
-        return self.parse_response(response.json())
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                url=f"{self.runtime_endpoint}/state/{self.version_id}/user/{conversation_id}/interact",
+                json={'request': request},
+                headers={'Authorization': self.api_key},
+            ) as response:
+                response.raise_for_status()  # Raise an exception for HTTP errors
+                self.all_responses = []
+                return self.parse_response(await response.json())
 
     def parse_response(self, response_data):
         """Parse the response data from Voiceflow."""
@@ -45,14 +46,14 @@ class VoiceflowAPI:
 
         return should_continue, button_payloads
 
-    def handle_user_input(self, conversation_id, user_input):
+    async def handle_user_input(self, conversation_id, user_input):
         """Handles user input by sending text or button payload to Voiceflow."""
         if isinstance(user_input, dict):
             # User input is a button payload
-            return self.interact(conversation_id, user_input)
+            return await self.interact(conversation_id, user_input)
         else:
             # User input is regular text
-            return self.interact(conversation_id, {'type': 'text', 'payload': user_input})
+            return await self.interact(conversation_id, {'type': 'text', 'payload': user_input})
 
     def get_last_response(self):
         """Return the last message from Voiceflow."""
