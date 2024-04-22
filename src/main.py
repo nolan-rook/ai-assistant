@@ -59,7 +59,11 @@ async def process_message(event, say):
     user_input = event.get('text', '').strip()
 
     logging.info(f"Processing message from user {user_id} in channel {channel_id}, thread {thread_ts}")
-    
+
+    async def send_delayed_response():
+        await asyncio.sleep(5)
+        await say(text="Just a moment...", thread_ts=thread_ts)
+
     async def send_response(user_input):
         if 'app_mention' in event['type']:
             user_input = re.sub(r"<@U[A-Z0-9]+>", "", user_input, count=1).strip()
@@ -117,12 +121,20 @@ async def process_message(event, say):
 
         blocks, summary_text = create_message_blocks(voiceflow.get_responses(), button_payloads)
         logging.info(f"Sending blocks: {blocks}, summary_text: {summary_text}, thread_ts: {thread_ts}")
-        await say(blocks=blocks, text=summary_text, thread_ts=thread_ts)      
+        return blocks, summary_text
+
+    delayed_task = asyncio.create_task(send_delayed_response())
+    response_task = asyncio.create_task(send_response(user_input))
+
     try:
-        await send_response(user_input)  
+        blocks, summary_text = await response_task
+        delayed_task.cancel()  # Cancel the delayed task if the response is ready before 5 seconds
+        await say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
     except Exception as e:
         logging.error(f"Error processing message: {e}")
         await say(text="An error occurred while processing your request.", thread_ts=thread_ts)
+        delayed_task.cancel()
+
 
 @bolt_app.event("app_mention")
 async def handle_app_mention_events(event, say):
