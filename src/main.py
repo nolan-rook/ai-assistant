@@ -61,8 +61,10 @@ async def process_message(event, say):
     logging.info(f"Processing message from user {user_id} in channel {channel_id}, thread {thread_ts}")
 
     async def send_delayed_response():
-        await asyncio.sleep(5)
-        await say(text="Just a moment...", thread_ts=thread_ts)
+        await asyncio.sleep(5)  # Non-blocking wait
+        # Send a "just a moment" message if the main task hasn't finished yet
+        if not response_task.done():
+            await say(text="Just a moment...", thread_ts=thread_ts)
 
     async def send_response(user_input):
         if 'app_mention' in event['type']:
@@ -73,7 +75,6 @@ async def process_message(event, say):
 
         combined_input = user_input
         files = event.get('files', [])
-
         if files:
             for file_info in files:
                 file_url = file_info.get('url_private_download')
@@ -128,13 +129,12 @@ async def process_message(event, say):
 
     try:
         blocks, summary_text = await response_task
-        delayed_task.cancel()  # Cancel the delayed task if the response is ready before 5 seconds
+        delayed_task.cancel()  # Cancel the delayed response if the main task is done
         await say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
     except Exception as e:
         logging.error(f"Error processing message: {e}")
         await say(text="An error occurred while processing your request.", thread_ts=thread_ts)
         delayed_task.cancel()
-
 
 @bolt_app.event("app_mention")
 async def handle_app_mention_events(event, say):
