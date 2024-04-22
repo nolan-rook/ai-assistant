@@ -61,13 +61,12 @@ async def process_message(event, say):
     logging.info(f"Starting message processing for user {user_id} in channel {channel_id} on thread {thread_ts}")
 
     async def send_delayed_response():
-        logging.info("Delay timer started, will send interim message if needed after 5 seconds.")
         await asyncio.sleep(5)
-        if not response_task.done():
-            logging.info("Sending 'just a moment...' message to channel.")
-            await say(text="Just a moment...", thread_ts=thread_ts)
+        if response_task.done():
+            logging.info("Main task completed, no need for interim message.")
         else:
-            logging.info("Main response completed before delay elapsed, not sending interim message.")
+            logging.info("5 seconds passed, main task not completed, sending 'just a moment...' message.")
+            await say(text="Just a moment...", thread_ts=thread_ts)
 
     async def send_response(user_input):
         logging.info("Preparing to process user input.")
@@ -101,6 +100,7 @@ async def process_message(event, say):
                 logging.error(f"Error reading URL {url}: {str(e)}")
                 combined_input += "\n[Note: A URL was not loaded properly and has been skipped.]"
 
+        logging.info("Input combined, fetching conversation details from database.")
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -126,11 +126,11 @@ async def process_message(event, say):
                     )
 
         blocks, summary_text = create_message_blocks(voiceflow.get_responses(), button_payloads)
-        logging.info(f"Completed message blocks creation, sending response to channel.")
+        logging.info(f"Message blocks created, concluding response task.")
         return blocks, summary_text
 
-    delayed_task = asyncio.create_task(send_delayed_response())
     response_task = asyncio.create_task(send_response(user_input))
+    delayed_task = asyncio.create_task(send_delayed_response())
 
     try:
         blocks, summary_text = await response_task
