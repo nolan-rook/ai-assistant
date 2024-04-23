@@ -52,6 +52,12 @@ voiceflow = VoiceflowAPI()
 async def slack_events(request: Request):
     return await slack_handler.handle(request)
 
+@bolt_app.event("app_home_opened")
+async def handle_app_home_opened(body, logger):
+    logger.info("App home opened event received")
+    # Add additional logic here if needed
+
+
 async def process_message(event, say):
     user_id = event.get('user')
     channel_id = event.get('channel')
