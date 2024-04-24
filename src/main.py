@@ -95,18 +95,28 @@ async def process_message(event, say):
             except Exception as e:
                 logging.error(f"Error reading URL {url}: {str(e)}")
                 combined_input += "\n[Note: A URL was not loaded properly and has been skipped.]"
-                
-        # Database interaction to fetch or create conversation
+                   
+        # Database interaction to fetch or create conversation                        
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT button_payloads FROM conversations WHERE conversation_id = %s",
+                    "SELECT button_payloads, transcript_created FROM conversations WHERE conversation_id = %s",
                     (conversation_id,)
                 )
                 existing_conversation = cur.fetchone()
 
                 if existing_conversation:
-                    button_payloads = existing_conversation[0]
+                    button_payloads, transcript_created = existing_conversation
+                    if not transcript_created:
+                        # Create transcript if it hasn't been created yet
+                        transcript_response = await voiceflow.create_transcript("production", conversation_id)
+                        logging.info(f"Transcript created: {transcript_response}")
+                        cur.execute(
+                            "UPDATE conversations SET transcript_created = TRUE WHERE conversation_id = %s",
+                            (conversation_id,)
+                        )
+
+                    # Process user input with Voiceflow
                     voiceflow_task = asyncio.create_task(voiceflow.handle_user_input(conversation_id, combined_input))
                     try:
                         is_running, button_payloads = await asyncio.wait_for(asyncio.shield(voiceflow_task), timeout=5.0)
@@ -114,11 +124,18 @@ async def process_message(event, say):
                         await say(text="Just a moment...", thread_ts=thread_ts)
                     finally:
                         is_running, button_payloads = await voiceflow_task
+
+                    # Update conversation with new button payloads
                     cur.execute(
                         "UPDATE conversations SET button_payloads = %s WHERE conversation_id = %s",
                         (Json(button_payloads), conversation_id)
                     )
                 else:
+                    # Create transcript for new conversation
+                    transcript_response = await voiceflow.create_transcript("production", conversation_id)
+                    logging.info(f"Transcript created: {transcript_response}")
+
+                    # Launch new conversation in Voiceflow
                     voiceflow_task_launch = asyncio.create_task(voiceflow.handle_user_input(conversation_id, {'type': 'launch'}))
                     try:
                         is_running, button_payloads = await asyncio.wait_for(asyncio.shield(voiceflow_task_launch), timeout=5.0)
@@ -126,7 +143,9 @@ async def process_message(event, say):
                         await say(text="Just a moment...", thread_ts=thread_ts)
                     finally:
                         is_running, button_payloads = await voiceflow_task_launch
+
                     if is_running:
+                        # Continue conversation with user input
                         voiceflow_task_input = asyncio.create_task(voiceflow.handle_user_input(conversation_id, combined_input))
                         try:
                             is_running, button_payloads = await asyncio.wait_for(asyncio.shield(voiceflow_task_input), timeout=5.0)
@@ -134,11 +153,12 @@ async def process_message(event, say):
                             await say(text="Just a moment...", thread_ts=thread_ts)
                         finally:
                             is_running, button_payloads = await voiceflow_task_input
+
+                    # Insert new conversation into database
                     cur.execute(
-                        "INSERT INTO conversations (conversation_id, user_id, channel_id, thread_ts, button_payloads) VALUES (%s, %s, %s, %s, %s)",
+                        "INSERT INTO conversations (conversation_id, user_id, channel_id, thread_ts, button_payloads, transcript_created) VALUES (%s, %s, %s, %s, %s, TRUE)",
                         (conversation_id, user_id, channel_id, thread_ts, Json(button_payloads))
                     )
-
         blocks, summary_text = create_message_blocks(voiceflow.get_responses(), button_payloads)
         logging.info(f"Sending blocks: {blocks}, summary_text: {summary_text}, thread_ts: {thread_ts}")
         await say(blocks=blocks, text=summary_text, thread_ts=thread_ts)

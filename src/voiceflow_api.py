@@ -27,6 +27,23 @@ class VoiceflowAPI:
                 self.all_responses = []
                 return self.parse_response(await response.json())
 
+    async def create_transcript(self, conversation_id):
+        """Create a transcript using the Voiceflow Transcript API."""
+        url = "https://api.voiceflow.com/v2/transcripts"
+        headers = {
+            "Authorization": self.api_key,
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        payload = {
+            "versionID": self.version_id,
+            "sessionID": conversation_id
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.put(url, json=payload, headers=headers) as response:
+                response.raise_for_status()  # Raise an exception for HTTP errors
+                return await response.json()
+
     def parse_response(self, response_data):
         """Parse the response data from Voiceflow."""
         button_payloads = {}
