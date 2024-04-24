@@ -109,7 +109,7 @@ async def process_message(event, say):
                     button_payloads, transcript_created = existing_conversation
                     if not transcript_created:
                         # Create transcript if it hasn't been created yet
-                        transcript_response = await voiceflow.create_transcript("production", conversation_id)
+                        transcript_response = await voiceflow.create_transcript(conversation_id)
                         logging.info(f"Transcript created: {transcript_response}")
                         cur.execute(
                             "UPDATE conversations SET transcript_created = TRUE WHERE conversation_id = %s",
@@ -132,7 +132,7 @@ async def process_message(event, say):
                     )
                 else:
                     # Create transcript for new conversation
-                    transcript_response = await voiceflow.create_transcript("production", conversation_id)
+                    transcript_response = await voiceflow.create_transcript(conversation_id)
                     logging.info(f"Transcript created: {transcript_response}")
 
                     # Launch new conversation in Voiceflow
