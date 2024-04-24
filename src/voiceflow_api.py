@@ -12,6 +12,7 @@ class VoiceflowAPI:
             raise ValueError("VOICEFLOW_API_KEY environment variable not set")
         self.runtime_endpoint = os.getenv('VOICEFLOW_RUNTIME_ENDPOINT', 'https://general-runtime.voiceflow.com')
         self.version_id = os.getenv('VOICEFLOW_VERSION_ID', 'production')
+        self.project_id = os.getenv('VOICEFLOW_PROJECT_ID')
         self.last_message = None
         self.all_responses = []
 
@@ -37,7 +38,8 @@ class VoiceflowAPI:
         }
         payload = {
             "versionID": self.version_id,
-            "sessionID": conversation_id
+            "sessionID": conversation_id,
+            "projectID": self.project_id
         }
         async with aiohttp.ClientSession() as session:
             async with session.put(url, json=payload, headers=headers) as response:
