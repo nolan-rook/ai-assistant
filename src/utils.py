@@ -71,12 +71,7 @@ async def download_file(file_url):
     headers = {'Authorization': f'Bearer {os.getenv("SLACK_BOT_TOKEN")}'}
     response = requests.get(file_url, headers=headers, allow_redirects=True)
     if response.status_code == 200:
-        logging.info(f"File downloaded successfully: {file_url}")
-        logging.info(f"Response headers: {response.headers}")
-        logging.info(f"First 100 bytes of file content: {response.content[:100]}")
-        
-        # Save to a temporary file
-        temp_file = tempfile.NamedTemporaryFile(delete=False)
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
         temp_file.write(response.content)
         temp_file.close()
         return temp_file.name
@@ -123,9 +118,13 @@ async def process_file(file_url, file_type):
 
     try:
         if file_type == 'mp4':
+            # Additional logging to debug
+            logging.info(f"File path: {file_path}")
+            logging.info(f"File size: {os.path.getsize(file_path)}")
+
             with open(file_path, "rb") as file_stream:
                 transcription = await transcribe_audio(file_stream)
-                os.unlink(file_path)  # Clean up the temporary file
+                os.unlink(file_path)  # Ensure cleanup
                 return create_text_file_in_memory(transcription)
         elif file_type == 'pdf':
             return extract_text_from_pdf(file_content)
@@ -174,6 +173,8 @@ def extract_webpage_content(url):
 # Function to transcribe audio using OpenAI's API
 async def transcribe_audio(file_stream):
     openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    # Additional logging to ensure correct API call
+    logging.info("Making API call to transcribe audio")
     transcription = await openai_client.audio.transcriptions.create(
         model="whisper-1",
         file=file_stream,
