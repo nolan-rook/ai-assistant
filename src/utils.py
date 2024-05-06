@@ -117,8 +117,7 @@ async def process_file(file_url, file_type):
     try:
         if file_type == 'mp4':
             try:
-                mp3_content = convert_mp4_to_mp3(file_content)
-                transcription = await transcribe_audio(mp3_content)
+                transcription = await transcribe_audio(file_content)
                 return create_text_file_in_memory(transcription)
             except Exception as e:
                 logging.error(f"Error in MP4 processing: {e}")
