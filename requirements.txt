@@ -22,8 +22,10 @@ distro==1.9.0
 exceptiongroup==1.2.0
 fastapi==0.110.1
 ffmpeg==1.4
+ffmpeg-python==0.2.0
 Flask==3.0.2
 frozenlist==1.4.1
+future==1.0.0
 greenlet==3.0.3
 gunicorn==21.2.0
 h11==0.14.0
