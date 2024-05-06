@@ -1,4 +1,5 @@
 import logging
+import tempfile
 from io import BytesIO
 from pdfminer.high_level import extract_text
 from docx import Document
@@ -66,14 +67,19 @@ def create_message_blocks(text_responses, button_payloads):
 
     return blocks, summary_text
 
-def download_file(file_url):
+async def download_file(file_url):
     headers = {'Authorization': f'Bearer {os.getenv("SLACK_BOT_TOKEN")}'}
     response = requests.get(file_url, headers=headers, allow_redirects=True)
     if response.status_code == 200:
         logging.info(f"File downloaded successfully: {file_url}")
         logging.info(f"Response headers: {response.headers}")
         logging.info(f"First 100 bytes of file content: {response.content[:100]}")
-        return response.content
+        
+        # Save to a temporary file
+        temp_file = tempfile.NamedTemporaryFile(delete=False)
+        temp_file.write(response.content)
+        temp_file.close()
+        return temp_file.name
     else:
         logging.error(f"Error downloading file: {response.status_code}, {response.text}")
         return None
@@ -111,17 +117,16 @@ def extract_text_from_pptx(file_content):
         return None
 
 async def process_file(file_url, file_type):
-    file_content = download_file(file_url)
-    if not file_content:
+    file_path = await download_file(file_url)
+    if not file_path:
         return None
+
     try:
         if file_type == 'mp4':
-            try:
-                transcription = await transcribe_audio(file_content)
+            with open(file_path, "rb") as file_stream:
+                transcription = await transcribe_audio(file_stream)
+                os.unlink(file_path)  # Clean up the temporary file
                 return create_text_file_in_memory(transcription)
-            except Exception as e:
-                logging.error(f"Error in MP4 processing: {e}")
-                return None
         elif file_type == 'pdf':
             return extract_text_from_pdf(file_content)
         elif file_type in ['doc', 'docx']:
@@ -130,6 +135,7 @@ async def process_file(file_url, file_type):
             return extract_text_from_pptx(file_content)
     except Exception as e:
         logging.error(f"General error processing file: {e}")
+        os.unlink(file_path)  # Ensure temporary files are cleaned up on error
         return None
 
 # Function to extract and parse content from a given URL
@@ -165,22 +171,19 @@ def extract_webpage_content(url):
         print(f"An error occurred while fetching content from {url}: {e}")
         return "", 0
 
-async def transcribe_audio(file_content):
-    """
-    This function assumes file_content is a BytesIO object of the MP4 file.
-    Adjust accordingly if your input differs.
-    """
-    # Assuming the transcription API can accept a file-like object directly
-    # If not, you may need to save to a temporary location or adjust accordingly
+# Function to transcribe audio using OpenAI's API
+async def transcribe_audio(file_stream):
+    openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     transcription = await openai_client.audio.transcriptions.create(
         model="whisper-1",
-        file=file_content,
+        file=file_stream,
         response_format="text"
     )
     return transcription['text']
 
-
+# Function to create a text file in memory from content
 def create_text_file_in_memory(content):
+    from io import BytesIO
     text_stream = BytesIO(content.encode('utf-8'))
     text_stream.seek(0)  # Rewind the stream to the beginning
     return text_stream
