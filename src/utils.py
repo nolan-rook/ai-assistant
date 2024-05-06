@@ -7,6 +7,12 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import os
+import ffmpeg
+from openai import OpenAI
+
+# Initialize your OpenAI client (make sure to set up your API key)
+openai_api_key = os.getenv("OPENAI_API_KEY")
+openai_client = OpenAI(api_key=openai_api_key)
 
 def create_message_blocks(text_responses, button_payloads):
     blocks = []
@@ -105,12 +111,18 @@ def extract_text_from_pptx(file_content):
         logging.error(f"Error extracting text from PPTX: {e}")
         return None
 
-def process_file(file_url, file_type):
+async def process_file(file_url, file_type):
     file_content = download_file(file_url)
     if not file_content:
         return None
     try:
-        if file_type == 'pdf':
+        if file_type == 'mp4':
+            mp3_content = convert_mp4_to_mp3(file_content)
+            transcription = await transcribe_audio(mp3_content)
+            transcription_file_path = "/path/to/save/transcription.txt"
+            await save_transcription_as_text(transcription, transcription_file_path)
+            return transcription_file_path  # This path will be used to send back to the user
+        elif file_type == 'pdf':
             return extract_text_from_pdf(file_content)
         elif file_type in ['doc', 'docx']:
             return extract_text_from_docx(file_content)
@@ -155,3 +167,22 @@ def extract_webpage_content(url):
     except Exception as e:
         print(f"An error occurred while fetching content from {url}: {e}")
         return "", 0
+
+def convert_mp4_to_mp3(mp4_content):
+    input_stream = ffmpeg.input('pipe:0')
+    output_stream = ffmpeg.output(input_stream, 'pipe:1', format='mp3')
+    out, _ = ffmpeg.run(output_stream, input=mp4_content, capture_stdout=True, capture_stderr=True)
+    return out
+
+async def transcribe_audio(audio_content):
+    transcription = await openai_client.audio.transcriptions.create(
+        model="whisper-1",
+        file=audio_file,
+        response_format="text",
+        prompt="Odyss"
+    )
+    return transcription['text']
+
+async def save_transcription_as_text(transcription, file_path):
+    async with aiofiles.open(file_path, 'w') as f:
+        await f.write(transcription)
