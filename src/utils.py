@@ -7,7 +7,6 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import os
-import ffmpeg
 from openai import OpenAI
 
 # Initialize your OpenAI client (make sure to set up your API key)
@@ -167,20 +166,20 @@ def extract_webpage_content(url):
         print(f"An error occurred while fetching content from {url}: {e}")
         return "", 0
 
-def convert_mp4_to_mp3(mp4_content):
-    input_stream = ffmpeg.input('pipe:0')
-    output_stream = ffmpeg.output(input_stream, 'pipe:1', format='mp3')
-    out, _ = ffmpeg.run(output_stream, input=mp4_content, capture_stdout=True, capture_stderr=True)
-    return out
-
-async def transcribe_audio(audio_content):
+async def transcribe_audio(file_content):
+    """
+    This function assumes file_content is a BytesIO object of the MP4 file.
+    Adjust accordingly if your input differs.
+    """
+    # Assuming the transcription API can accept a file-like object directly
+    # If not, you may need to save to a temporary location or adjust accordingly
     transcription = await openai_client.audio.transcriptions.create(
         model="whisper-1",
-        file=audio_file,
-        response_format="text",
-        prompt="Odyss"
+        file=file_content,
+        response_format="text"
     )
     return transcription['text']
+
 
 def create_text_file_in_memory(content):
     text_stream = BytesIO(content.encode('utf-8'))
