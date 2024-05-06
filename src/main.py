@@ -58,48 +58,56 @@ async def handle_app_home_opened(body, logger):
     # Add additional logic here if needed
 
 
-async def send_response(user_input):
-    if 'app_mention' in event['type']:
-        user_input = re.sub(r"<@U[A-Z0-9]+>", "", user_input, count=1).strip()
+async def process_message(event, say):
+    user_id = event.get('user')
+    channel_id = event.get('channel')
+    thread_ts = event.get('thread_ts', event['ts'])
+    user_input = event.get('text', '').strip()
 
-    conversation_id = f"{channel_id}-{thread_ts}"
-    logging.info(f"Processing in conversation {conversation_id}")
+    logging.info(f"Processing message from user {user_id} in channel {channel_id}, thread {thread_ts}")
+    
+    async def send_response(user_input):
+        if 'app_mention' in event['type']:
+            user_input = re.sub(r"<@U[A-Z0-9]+>", "", user_input, count=1).strip()
 
-    combined_input = user_input
-    files = event.get('files', [])
+        conversation_id = f"{channel_id}-{thread_ts}"
+        logging.info(f"Processing in conversation {conversation_id}")
 
-    if files:
-        for file_info in files:
-            file_url = file_info.get('url_private_download')
-            file_type = file_info.get('filetype')
-            if file_url:
-                if file_type == 'mp4':
-                    transcription_file_path = await process_file(file_url, file_type)  # Make sure process_file is async
-                    if transcription_file_path:
-                        # Upload the transcription text file back to the Slack channel
-                        await bolt_app.client.files_upload(
-                            channels=channel_id,
-                            file=transcription_file_path,
-                            title="Transcription Result",
-                            filetype='text',
-                            filename='transcription.txt'
-                        )
-                else:
-                    # Handle other file types or add text to combined_input as before
-                    file_text = await process_file(file_url, file_type)  # Ensure process_file returns immediately handled text for other types
-                    if file_text:
-                        combined_input += "\n" + file_text
+        combined_input = user_input
+        files = event.get('files', [])
 
-    urls = re.findall(r'<http[s]?://[^>]+>', user_input)
-    for url in urls:
-        url = url[1:-1]  # Strip angle brackets
-        try:
-            webpage_text = extract_webpage_content(url)
-            if webpage_text:
-                combined_input += "\n" + webpage_text
-        except Exception as e:
-            logging.error(f"Error reading URL {url}: {str(e)}")
-            combined_input += "\n[Note: A URL was not loaded properly and has been skipped.]"                   
+        if files:
+            for file_info in files:
+                file_url = file_info.get('url_private_download')
+                file_type = file_info.get('filetype')
+                if file_url:
+                    if file_type == 'mp4':
+                        transcription_file_path = await process_file(file_url, file_type)  # Make sure process_file is async
+                        if transcription_file_path:
+                            # Upload the transcription text file back to the Slack channel
+                            await bolt_app.client.files_upload(
+                                channels=channel_id,
+                                file=transcription_file_path,
+                                title="Transcription Result",
+                                filetype='text',
+                                filename='transcription.txt'
+                            )
+                    else:
+                        # Handle other file types or add text to combined_input as before
+                        file_text = await process_file(file_url, file_type)  # Ensure process_file returns immediately handled text for other types
+                        if file_text:
+                            combined_input += "\n" + file_text
+
+        urls = re.findall(r'<http[s]?://[^>]+>', user_input)
+        for url in urls:
+            url = url[1:-1]  # Strip angle brackets
+            try:
+                webpage_text = extract_webpage_content(url)
+                if webpage_text:
+                    combined_input += "\n" + webpage_text
+            except Exception as e:
+                logging.error(f"Error reading URL {url}: {str(e)}")
+                combined_input += "\n[Note: A URL was not loaded properly and has been skipped.]"                   
         # Database interaction to fetch or create conversation                        
         with get_db_connection() as conn:
             with conn.cursor() as cur:
