@@ -118,24 +118,28 @@ async def process_file(file_url, file_type):
 
     try:
         if file_type == 'mp4':
-            # Additional logging to debug
             logging.info(f"File path: {file_path}")
             logging.info(f"File size: {os.path.getsize(file_path)}")
 
             with open(file_path, "rb") as file_stream:
                 transcription = await transcribe_audio(file_stream)
-                os.unlink(file_path)  # Ensure cleanup
-                return create_text_file_in_memory(transcription)
+                if transcription is None:
+                    logging.error("Failed to transcribe or no transcription returned")
+                    return None
+                else:
+                    return create_text_file_in_memory(transcription)
         elif file_type == 'pdf':
             return extract_text_from_pdf(file_content)
         elif file_type in ['doc', 'docx']:
             return extract_text_from_docx(file_content)
         elif file_type in ['ppt', 'pptx']:
             return extract_text_from_pptx(file_content)
+        # Add additional file type handling here
     except Exception as e:
         logging.error(f"General error processing file: {e}")
-        os.unlink(file_path)  # Ensure temporary files are cleaned up on error
-        return None
+    finally:
+        if os.path.exists(file_path):
+            os.unlink(file_path)  # Ensure cleanup only after processing is complete
 
 # Function to extract and parse content from a given URL
 def extract_webpage_content(url):
@@ -170,23 +174,29 @@ def extract_webpage_content(url):
         print(f"An error occurred while fetching content from {url}: {e}")
         return "", 0
 
+# Function to transcribe audio using OpenAI's API
 async def transcribe_audio(file_stream):
     openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     logging.info("Making API call to transcribe audio")
     try:
-        transcription = await openai_client.audio.transcriptions.create(
+        transcription_response = await openai_client.audio.transcriptions.create(
             model="whisper-1",
             file=file_stream,
             response_format="text"
         )
-        return transcription['text']
+        if 'text' in transcription_response:
+            return transcription_response['text']
+        else:
+            logging.error("Transcription successful but no text returned")
+            return None
     except Exception as e:
         logging.error(f"Error during transcription: {str(e)}")
         return None
 
-# Function to create a text file in memory from content
 def create_text_file_in_memory(content):
-    from io import BytesIO
+    if content is None:
+        logging.error("No content to encode into memory")
+        return None
     text_stream = BytesIO(content.encode('utf-8'))
     text_stream.seek(0)  # Rewind the stream to the beginning
     return text_stream
