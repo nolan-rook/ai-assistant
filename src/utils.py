@@ -117,22 +117,23 @@ async def process_file(file_url, file_type):
         return None
     try:
         if file_type == 'mp4':
-            mp3_content = convert_mp4_to_mp3(file_content)
-            transcription = await transcribe_audio(mp3_content)
-            return create_text_file_in_memory(transcription) 
+            try:
+                mp3_content = convert_mp4_to_mp3(file_content)
+                transcription = await transcribe_audio(mp3_content)
+                return create_text_file_in_memory(transcription)
+            except Exception as e:
+                logging.error(f"Error in MP4 processing: {e}")
+                return None
         elif file_type == 'pdf':
             return extract_text_from_pdf(file_content)
         elif file_type in ['doc', 'docx']:
             return extract_text_from_docx(file_content)
         elif file_type in ['ppt', 'pptx']:
             return extract_text_from_pptx(file_content)
-        else:
-            logging.error(f"Unsupported file type: {file_type}")
-            return None
     except Exception as e:
-        logging.error(f"Error processing file: {e}")
-        return "Error in processing the file."
-    
+        logging.error(f"General error processing file: {e}")
+        return None
+
 # Function to extract and parse content from a given URL
 def extract_webpage_content(url):
     headers = {
@@ -167,15 +168,9 @@ def extract_webpage_content(url):
         return "", 0
 
 def convert_mp4_to_mp3(mp4_content):
-    process = (
-        ffmpeg
-        .input('pipe:0', format='mp4')
-        .output('pipe:1', format='mp3')
-        .run_async(pipe_stdin=True, pipe_stdout=True, pipe_stderr=True)
-    )
-    out, err = process.communicate(input=mp4_content)
-    if process.returncode != 0:
-        raise Exception("ffmpeg error", err)
+    input_stream = ffmpeg.input('pipe:0')
+    output_stream = ffmpeg.output(input_stream, 'pipe:1', format='mp3')
+    out, _ = ffmpeg.run(output_stream, input=mp4_content, capture_stdout=True, capture_stderr=True)
     return out
 
 async def transcribe_audio(audio_content):
@@ -191,7 +186,3 @@ def create_text_file_in_memory(content):
     text_stream = BytesIO(content.encode('utf-8'))
     text_stream.seek(0)  # Rewind the stream to the beginning
     return text_stream
-
-async def save_transcription_as_text(transcription, file_path):
-    async with aiofiles.open(file_path, 'w') as f:
-        await f.write(transcription)
