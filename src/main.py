@@ -81,7 +81,7 @@ async def process_message(event, say):
                 file_url = file_info.get('url_private_download')
                 file_type = file_info.get('filetype')
                 if file_url:
-                    result = await process_file(file_url, file_type)
+                    result = await process_file(file_url, file_type)  # Call only once per file
                     if result and file_type == 'mp4':
                         await bolt_app.client.files_upload(
                             channels=channel_id,
@@ -90,11 +90,8 @@ async def process_message(event, say):
                             filetype='text',
                             filename='transcription.txt'
                         )
-                    else:
-                        # Handle other file types or add text to combined_input as before
-                        file_text = await process_file(file_url, file_type)  # Ensure process_file returns immediately handled text for other types
-                        if file_text:
-                            combined_input += "\n" + file_text
+                    elif result:  # This handles other file types that may have text to append
+                        combined_input += "\n" + result
 
         urls = re.findall(r'<http[s]?://[^>]+>', user_input)
         for url in urls:

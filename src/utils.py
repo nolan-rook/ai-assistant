@@ -170,17 +170,19 @@ def extract_webpage_content(url):
         print(f"An error occurred while fetching content from {url}: {e}")
         return "", 0
 
-# Function to transcribe audio using OpenAI's API
 async def transcribe_audio(file_stream):
     openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    # Additional logging to ensure correct API call
     logging.info("Making API call to transcribe audio")
-    transcription = await openai_client.audio.transcriptions.create(
-        model="whisper-1",
-        file=file_stream,
-        response_format="text"
-    )
-    return transcription['text']
+    try:
+        transcription = await openai_client.audio.transcriptions.create(
+            model="whisper-1",
+            file=file_stream,
+            response_format="text"
+        )
+        return transcription['text']
+    except Exception as e:
+        logging.error(f"Error during transcription: {str(e)}")
+        return None
 
 # Function to create a text file in memory from content
 def create_text_file_in_memory(content):
