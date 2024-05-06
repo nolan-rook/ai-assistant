@@ -81,17 +81,15 @@ async def process_message(event, say):
                 file_url = file_info.get('url_private_download')
                 file_type = file_info.get('filetype')
                 if file_url:
-                    if file_type == 'mp4':
-                        transcription_file_path = await process_file(file_url, file_type)  # Make sure process_file is async
-                        if transcription_file_path:
-                            # Upload the transcription text file back to the Slack channel
-                            await bolt_app.client.files_upload(
-                                channels=channel_id,
-                                file=transcription_file_path,
-                                title="Transcription Result",
-                                filetype='text',
-                                filename='transcription.txt'
-                            )
+                    result = await process_file(file_url, file_type)
+                    if result and file_type == 'mp4':
+                        await bolt_app.client.files_upload(
+                            channels=channel_id,
+                            file=result,
+                            title="Transcription",
+                            filetype='text',
+                            filename='transcription.txt'
+                        )
                     else:
                         # Handle other file types or add text to combined_input as before
                         file_text = await process_file(file_url, file_type)  # Ensure process_file returns immediately handled text for other types

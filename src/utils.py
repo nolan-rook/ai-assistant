@@ -119,9 +119,7 @@ async def process_file(file_url, file_type):
         if file_type == 'mp4':
             mp3_content = convert_mp4_to_mp3(file_content)
             transcription = await transcribe_audio(mp3_content)
-            transcription_file_path = "/path/to/save/transcription.txt"
-            await save_transcription_as_text(transcription, transcription_file_path)
-            return transcription_file_path  # This path will be used to send back to the user
+            return create_text_file_in_memory(transcription) 
         elif file_type == 'pdf':
             return extract_text_from_pdf(file_content)
         elif file_type in ['doc', 'docx']:
@@ -183,6 +181,11 @@ async def transcribe_audio(audio_content):
     )
     return transcription['text']
 
+def create_text_file_in_memory(content):
+    # Create a BytesIO object with the transcription text
+    text_stream = BytesIO(content.encode('utf-8'))
+    text_stream.name = 'transcription.txt'  # Set a name for the in-memory file
+    return text_stream
 async def save_transcription_as_text(transcription, file_path):
     async with aiofiles.open(file_path, 'w') as f:
         await f.write(transcription)
