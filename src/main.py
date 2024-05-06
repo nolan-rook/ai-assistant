@@ -83,13 +83,14 @@ async def process_message(event, say):
                 if file_url:
                     result = await process_file(file_url, file_type)
                     if result and file_type == 'mp4':
-                        await bolt_app.client.files_upload(
-                            channels=channel_id,
-                            file=result,
-                            title="Transcription",
-                            filetype='text',
-                            filename='transcription.txt'
-                        )
+                        with result as file_stream:  # Ensure that the file stream is open
+                            await bolt_app.client.files_upload_v2(
+                                channels=channel_id,
+                                file=file_stream,
+                                title="Transcription",
+                                filetype='text',
+                                filename='transcription.txt'
+                            )
                     else:
                         # Handle other file types or add text to combined_input as before
                         file_text = await process_file(file_url, file_type)  # Ensure process_file returns immediately handled text for other types

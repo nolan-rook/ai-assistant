@@ -167,9 +167,15 @@ def extract_webpage_content(url):
         return "", 0
 
 def convert_mp4_to_mp3(mp4_content):
-    input_stream = ffmpeg.input('pipe:0')
-    output_stream = ffmpeg.output(input_stream, 'pipe:1', format='mp3')
-    out, _ = ffmpeg.run(output_stream, input=mp4_content, capture_stdout=True, capture_stderr=True)
+    process = (
+        ffmpeg
+        .input('pipe:0', format='mp4')
+        .output('pipe:1', format='mp3')
+        .run_async(pipe_stdin=True, pipe_stdout=True, pipe_stderr=True)
+    )
+    out, err = process.communicate(input=mp4_content)
+    if process.returncode != 0:
+        raise Exception("ffmpeg error", err)
     return out
 
 async def transcribe_audio(audio_content):
@@ -182,10 +188,10 @@ async def transcribe_audio(audio_content):
     return transcription['text']
 
 def create_text_file_in_memory(content):
-    # Create a BytesIO object with the transcription text
     text_stream = BytesIO(content.encode('utf-8'))
-    text_stream.name = 'transcription.txt'  # Set a name for the in-memory file
+    text_stream.seek(0)  # Rewind the stream to the beginning
     return text_stream
+
 async def save_transcription_as_text(transcription, file_path):
     async with aiofiles.open(file_path, 'w') as f:
         await f.write(transcription)
