@@ -175,31 +175,17 @@ def extract_webpage_content(url):
         print(f"An error occurred while fetching content from {url}: {e}")
         return "", 0
 
-async def transcribe_audio(file_path):
+# Function to transcribe audio using OpenAI's API
+async def transcribe_audio(file_stream):
     openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     logging.info("Making API call to transcribe audio")
-
     try:
-        with open(file_path, 'rb') as file:
-            file_data = file.read()
-        
-        # Assuming a maximum size of 25 MB per chunk
-        max_size = 25 * 1024 * 1024
-        chunks = [file_data[i:i + max_size] for i in range(0, len(file_data), max_size)]
-
-        full_transcription = ""
-        for i, chunk in enumerate(chunks):
-            logging.info(f"Transcribing chunk {i+1}/{len(chunks)}")
-            chunk_stream = BytesIO(chunk)
-            chunk_stream.seek(0)
-            transcription_response = await openai_client.audio.transcriptions.create(
-                model="whisper-1",
-                file=chunk_stream,
-                response_format="text"
-            )
-            full_transcription += transcription_response + " "
-
-        return full_transcription.strip()
+        transcription_response = await openai_client.audio.transcriptions.create(
+            model="whisper-1",
+            file=file_stream,
+            response_format="text"
+        )
+        return transcription_response
     except Exception as e:
         logging.error(f"Error during transcription: {str(e)}")
         return None
