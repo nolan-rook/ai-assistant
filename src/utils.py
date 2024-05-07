@@ -176,34 +176,26 @@ def extract_webpage_content(url):
         print(f"An error occurred while fetching content from {url}: {e}")
         return "", 0
 
-# Function to transcribe audio using OpenAI's API
 async def transcribe_audio(file_path):
     openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    logging.info("Preparing to transcribe audio")
+    logging.info("Making API call to transcribe audio")
 
     try:
-        # Load the audio file
-        audio = AudioSegment.from_file(file_path)
-        file_size = os.path.getsize(file_path)
-        max_size = 25 * 1024 * 1024  # 25 MB in bytes
+        with open(file_path, 'rb') as file:
+            file_data = file.read()
+        
+        # Assuming a maximum size of 25 MB per chunk
+        max_size = 25 * 1024 * 1024
+        chunks = [file_data[i:i + max_size] for i in range(0, len(file_data), max_size)]
 
-        # Check if the file needs to be split
-        if file_size > max_size:
-            logging.info("Splitting the audio file into smaller chunks")
-            chunks = split_audio(audio, max_size)
-        else:
-            chunks = [audio]
-
-        # Transcribe each chunk and concatenate the results
         full_transcription = ""
         for i, chunk in enumerate(chunks):
             logging.info(f"Transcribing chunk {i+1}/{len(chunks)}")
-            chunk_file = BytesIO()
-            chunk.export(chunk_file, format="mp3")
-            chunk_file.seek(0)
+            chunk_stream = BytesIO(chunk)
+            chunk_stream.seek(0)
             transcription_response = await openai_client.audio.transcriptions.create(
                 model="whisper-1",
-                file=chunk_file,
+                file=chunk_stream,
                 response_format="text"
             )
             full_transcription += transcription_response + " "
@@ -212,17 +204,6 @@ async def transcribe_audio(file_path):
     except Exception as e:
         logging.error(f"Error during transcription: {str(e)}")
         return None
-
-def split_audio(audio, max_size):
-    # Split the audio into chunks of approximately max_size bytes
-    chunk_length_ms = 1000 * 60 * 10  # 10 minutes
-    chunks = []
-
-    for i in range(0, len(audio), chunk_length_ms):
-        chunk = audio[i:i+chunk_length_ms]
-        chunks.append(chunk)
-
-    return chunks
 
 def create_text_file_in_memory(content):
     if content is None:
