@@ -71,7 +71,8 @@ async def download_file(file_url):
     headers = {'Authorization': f'Bearer {os.getenv("SLACK_BOT_TOKEN")}'}
     response = requests.get(file_url, headers=headers, allow_redirects=True)
     if response.status_code == 200:
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+        file_suffix = ".mp4" if file_url.endswith(".mp4") else ".mov" if file_url.endswith(".mov") else ""
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=file_suffix)
         temp_file.write(response.content)
         temp_file.close()
         return temp_file.name
@@ -117,7 +118,7 @@ async def process_file(file_url, file_type):
         return None
 
     try:
-        if file_type == 'mp4':
+        if file_type in ['mp4', 'mov']:  # Check for both mp4 and mov file types
             logging.info(f"File path: {file_path}")
             logging.info(f"File size: {os.path.getsize(file_path)}")
 

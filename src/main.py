@@ -82,7 +82,7 @@ async def process_message(event, say):
                 file_type = file_info.get('filetype')
                 if file_url:
                     result = await process_file(file_url, file_type)  # Call only once per file
-                    if result and file_type == 'mp4':
+                    if result and (file_type == 'mp4' or file_type == 'mov'):
                         await bolt_app.client.files_upload(
                             channels=channel_id,
                             file=result,
