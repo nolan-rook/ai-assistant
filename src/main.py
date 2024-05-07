@@ -90,6 +90,7 @@ async def process_message(event, say):
                             filetype='text',
                             filename='transcription.txt'
                         )
+                        return
                     elif result:  # This handles other file types that may have text to append
                         combined_input += "\n" + result
 
