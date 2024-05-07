@@ -183,7 +183,8 @@ async def transcribe_audio(file_stream):
         transcription_response = await openai_client.audio.transcriptions.create(
             model="whisper-1",
             file=file_stream,
-            response_format="text"
+            response_format="vtt",
+            language="en"
         )
         return transcription_response
     except Exception as e:
