@@ -9,7 +9,6 @@ from bs4 import BeautifulSoup
 import re
 import os
 from openai import AsyncOpenAI
-from pydub import AudioSegment
 
 # Initialize your OpenAI client (make sure to set up your API key)
 openai_api_key = os.getenv("OPENAI_API_KEY")
