@@ -184,11 +184,7 @@ async def transcribe_audio(file_stream):
             file=file_stream,
             response_format="text"
         )
-        if 'text' in transcription_response:
-            return transcription_response['text']
-        else:
-            logging.error("Transcription successful but no text returned")
-            return None
+        return transcription_response
     except Exception as e:
         logging.error(f"Error during transcription: {str(e)}")
         return None
