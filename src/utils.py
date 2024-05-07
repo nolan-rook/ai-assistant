@@ -8,7 +8,7 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import os
-from openai import OpenAI
+from openai import AsyncOpenAI
 
 # Initialize your OpenAI client (make sure to set up your API key)
 openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -176,7 +176,7 @@ def extract_webpage_content(url):
 
 # Function to transcribe audio using OpenAI's API
 async def transcribe_audio(file_stream):
-    openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     logging.info("Making API call to transcribe audio")
     try:
         transcription_response = await openai_client.audio.transcriptions.create(
