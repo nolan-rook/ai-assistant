@@ -9,6 +9,7 @@ from bs4 import BeautifulSoup
 import re
 import os
 from openai import AsyncOpenAI
+from pydub import AudioSegment
 
 # Initialize your OpenAI client (make sure to set up your API key)
 openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -71,7 +72,7 @@ async def download_file(file_url):
     headers = {'Authorization': f'Bearer {os.getenv("SLACK_BOT_TOKEN")}'}
     response = requests.get(file_url, headers=headers, allow_redirects=True)
     if response.status_code == 200:
-        file_suffix = ".mp4" if file_url.endswith(".mp4") else ".mov" if file_url.endswith(".mov") else ""
+        file_suffix = ".mp4" if file_url.endswith(".mp4") else ".m4a" if file_url.endswith(".m4a") else ""
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=file_suffix)
         temp_file.write(response.content)
         temp_file.close()
@@ -118,7 +119,7 @@ async def process_file(file_url, file_type):
         return None
 
     try:
-        if file_type in ['mp4', 'mov']:  # Check for both mp4 and mov file types
+        if file_type in ['mp4', 'm4a']:  # Check for both mp4 and m4a file types
             logging.info(f"File path: {file_path}")
             logging.info(f"File size: {os.path.getsize(file_path)}")
 
@@ -176,19 +177,52 @@ def extract_webpage_content(url):
         return "", 0
 
 # Function to transcribe audio using OpenAI's API
-async def transcribe_audio(file_stream):
+async def transcribe_audio(file_path):
     openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    logging.info("Making API call to transcribe audio")
+    logging.info("Preparing to transcribe audio")
+
     try:
-        transcription_response = await openai_client.audio.transcriptions.create(
-            model="whisper-1",
-            file=file_stream,
-            response_format="text"
-        )
-        return transcription_response
+        # Load the audio file
+        audio = AudioSegment.from_file(file_path)
+        file_size = os.path.getsize(file_path)
+        max_size = 25 * 1024 * 1024  # 25 MB in bytes
+
+        # Check if the file needs to be split
+        if file_size > max_size:
+            logging.info("Splitting the audio file into smaller chunks")
+            chunks = split_audio(audio, max_size)
+        else:
+            chunks = [audio]
+
+        # Transcribe each chunk and concatenate the results
+        full_transcription = ""
+        for i, chunk in enumerate(chunks):
+            logging.info(f"Transcribing chunk {i+1}/{len(chunks)}")
+            chunk_file = BytesIO()
+            chunk.export(chunk_file, format="mp3")
+            chunk_file.seek(0)
+            transcription_response = await openai_client.audio.transcriptions.create(
+                model="whisper-1",
+                file=chunk_file,
+                response_format="text"
+            )
+            full_transcription += transcription_response + " "
+
+        return full_transcription.strip()
     except Exception as e:
         logging.error(f"Error during transcription: {str(e)}")
         return None
+
+def split_audio(audio, max_size):
+    # Split the audio into chunks of approximately max_size bytes
+    chunk_length_ms = 1000 * 60 * 10  # 10 minutes
+    chunks = []
+
+    for i in range(0, len(audio), chunk_length_ms):
+        chunk = audio[i:i+chunk_length_ms]
+        chunks.append(chunk)
+
+    return chunks
 
 def create_text_file_in_memory(content):
     if content is None:
