@@ -12,7 +12,7 @@ from openai import AsyncOpenAI
 
 # Initialize your OpenAI client (make sure to set up your API key)
 openai_api_key = os.getenv("OPENAI_API_KEY")
-openai_client = OpenAI(api_key=openai_api_key)
+openai_client = AsyncOpenAI(api_key=openai_api_key)
 
 def create_message_blocks(text_responses, button_payloads):
     blocks = []
