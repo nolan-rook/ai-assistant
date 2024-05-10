@@ -1,20 +1,82 @@
+# utils.py
+import psycopg2
+from psycopg2.extras import Json
+from typing import Optional, Dict, List
+import os
 import logging
-import tempfile
+import re
 from io import BytesIO
 from pdfminer.high_level import extract_text
 from docx import Document
 from pptx import Presentation
-import requests
 from bs4 import BeautifulSoup
-import re
-import os
+import requests
+from cachetools import TTLCache
 from openai import AsyncOpenAI
+import tempfile
 
-# Initialize your OpenAI client (make sure to set up your API key)
-openai_api_key = os.getenv("OPENAI_API_KEY")
-openai_client = AsyncOpenAI(api_key=openai_api_key)
+# Load environment variables
+from dotenv import load_dotenv
+load_dotenv()
 
-def create_message_blocks(text_responses, button_payloads):
+# Database connection
+database_url = os.getenv("DATABASE_URL")
+slack_bot_token = os.getenv("SLACK_BOT_TOKEN")
+processed_events = TTLCache(maxsize=1000, ttl=60)
+
+# Database connection function
+def get_db_connection(autocommit=True):
+    conn = psycopg2.connect(database_url)
+    if autocommit:
+        conn.autocommit = True
+    return conn
+
+def store_transcript(conversation_id, user_id, channel_id, thread_ts, title, transcript):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO transcripts (conversation_id, user_id, channel_id, thread_ts, title, transcript)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (conversation_id)
+                DO UPDATE SET title = EXCLUDED.title, transcript = EXCLUDED.transcript, created_at = NOW();
+                """,
+                (conversation_id, user_id, channel_id, thread_ts, title, transcript)
+            )
+
+def get_transcript(title):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT transcript FROM transcripts WHERE title = %s",
+                (title,)
+            )
+            result = cur.fetchone()
+            return result[0] if result else None
+
+async def prompt_for_title(conversation_id, say):
+    prompt_message = "Please provide a title for the transcript."
+    await say(text=prompt_message, thread_ts=conversation_id.split('-')[-1])
+
+async def handle_title_submission(event, say):
+    conversation_id = f"{event['channel']}-{event['thread_ts']}"
+    title = event.get('text', '').strip()
+    user_id = event['user']
+    await say(text=f"Thank you! I've saved the title '{title}' for your transcript.", thread_ts=event['thread_ts'])
+
+    # Retrieve transcript data from the conversation to update with the title
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT user_id, channel_id, thread_ts, transcript FROM transcripts WHERE conversation_id = %s",
+                (conversation_id,)
+            )
+            result = cur.fetchone()
+            if result:
+                _, channel_id, thread_ts, transcript = result
+                store_transcript(conversation_id, user_id, channel_id, thread_ts, title, transcript)
+
+def create_message_blocks(text_responses: List[str], button_payloads: Dict) -> (List[Dict], str):
     blocks = []
     summary_text = "Select an option:"
     max_chars = 3000  # Maximum characters for a block of text
@@ -68,7 +130,7 @@ def create_message_blocks(text_responses, button_payloads):
     return blocks, summary_text
 
 async def download_file(file_url):
-    headers = {'Authorization': f'Bearer {os.getenv("SLACK_BOT_TOKEN")}'}
+    headers = {'Authorization': f'Bearer {slack_bot_token}'}
     response = requests.get(file_url, headers=headers, allow_redirects=True)
     if response.status_code == 200:
         file_suffix = ".mp4" if file_url.endswith(".mp4") else ".m4a" if file_url.endswith(".m4a") else ""
@@ -79,6 +141,35 @@ async def download_file(file_url):
     else:
         logging.error(f"Error downloading file: {response.status_code}, {response.text}")
         return None
+
+async def process_file(file_url, file_type):
+    file_path = await download_file(file_url)
+    if not file_path:
+        return None
+
+    try:
+        if file_type in ['mp4', 'm4a']:  # Check for both mp4 and m4a file types
+            logging.info(f"File path: {file_path}")
+            logging.info(f"File size: {os.path.getsize(file_path)}")
+
+            with open(file_path, "rb") as file_stream:
+                transcription = await transcribe_audio(file_stream)
+                if transcription is None:
+                    logging.error("Failed to transcribe or no transcription returned")
+                    return None
+                else:
+                    return create_text_file_in_memory(transcription)
+        elif file_type == 'pdf':
+            return extract_text_from_pdf(file_content)
+        elif file_type in ['doc', 'docx']:
+            return extract_text_from_docx(file_content)
+        elif file_type in ['ppt', 'pptx']:
+            return extract_text_from_pptx(file_content)
+    except Exception as e:
+        logging.error(f"General error processing file: {e}")
+    finally:
+        if os.path.exists(file_path):
+            os.unlink(file_path)
 
 def extract_text_from_pdf(file_content):
     try:
@@ -112,37 +203,6 @@ def extract_text_from_pptx(file_content):
         logging.error(f"Error extracting text from PPTX: {e}")
         return None
 
-async def process_file(file_url, file_type):
-    file_path = await download_file(file_url)
-    if not file_path:
-        return None
-
-    try:
-        if file_type in ['mp4', 'm4a']:  # Check for both mp4 and m4a file types
-            logging.info(f"File path: {file_path}")
-            logging.info(f"File size: {os.path.getsize(file_path)}")
-
-            with open(file_path, "rb") as file_stream:
-                transcription = await transcribe_audio(file_stream)
-                if transcription is None:
-                    logging.error("Failed to transcribe or no transcription returned")
-                    return None
-                else:
-                    return create_text_file_in_memory(transcription)
-        elif file_type == 'pdf':
-            return extract_text_from_pdf(file_content)
-        elif file_type in ['doc', 'docx']:
-            return extract_text_from_docx(file_content)
-        elif file_type in ['ppt', 'pptx']:
-            return extract_text_from_pptx(file_content)
-        # Add additional file type handling here
-    except Exception as e:
-        logging.error(f"General error processing file: {e}")
-    finally:
-        if os.path.exists(file_path):
-            os.unlink(file_path)  # Ensure cleanup only after processing is complete
-
-# Function to extract and parse content from a given URL
 def extract_webpage_content(url):
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
@@ -152,34 +212,29 @@ def extract_webpage_content(url):
     }
     try:
         response = requests.get(url, headers=headers)
-        response.raise_for_status()  # Raises an HTTPError for bad responses
+        response.raise_for_status()
         soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Initialize an empty list to hold tuples of (tag name, text)
         content_list = []
         for tag in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
             tag_text = tag.get_text(separator=" ", strip=True)
             clean_text = re.sub(r'\s+', ' ', tag_text).strip()
-            if clean_text:  # Ensure the text is not empty
+            if clean_text:
                 content_list.append((tag.name, clean_text))
-        
-        # Join the texts and calculate the length
         full_text = ' '.join([text for _, text in content_list])
-        content_length = len(full_text)
-        
         return full_text
     except requests.HTTPError as http_err:
-        print(f"HTTP error occurred while fetching content from {url}: {http_err}")
-        return "", 0
+        logging.error(f"HTTP error occurred while fetching content from {url}: {http_err}")
+        return None
     except Exception as e:
-        print(f"An error occurred while fetching content from {url}: {e}")
-        return "", 0
+        logging.error(f"An error occurred while fetching content from {url}: {e}")
+        return None
 
-# Function to transcribe audio using OpenAI's API
 async def transcribe_audio(file_stream):
-    openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    logging.info("Making API call to transcribe audio")
     try:
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        openai_client = AsyncOpenAI(api_key=openai_api_key)
+
+        logging.info("Making API call to transcribe audio")
         transcription_response = await openai_client.audio.transcriptions.create(
             model="whisper-1",
             file=file_stream,
@@ -196,5 +251,5 @@ def create_text_file_in_memory(content):
         logging.error("No content to encode into memory")
         return None
     text_stream = BytesIO(content.encode('utf-8'))
-    text_stream.seek(0)  # Rewind the stream to the beginning
+    text_stream.seek(0)
     return text_stream
