@@ -3,7 +3,7 @@ from slack_bolt.async_app import AsyncApp
 from slack_bolt.adapter.fastapi.async_handler import AsyncSlackRequestHandler
 
 from src.voiceflow_api import VoiceflowAPI
-from src.utils import store_transcript, process_file, prompt_for_title, handle_title_submission, create_message_blocks, extract_webpage_content, processed_events
+from src.utils import store_transcript, process_file, create_message_blocks, extract_webpage_content, processed_events
 
 import re
 import os
@@ -60,7 +60,6 @@ async def handle_app_home_opened(body, logger):
     logger.info("App home opened event received")
     # Add additional logic here if needed
 
-
 async def process_message(event, say):
     user_id = event.get('user')
     channel_id = event.get('channel')
@@ -68,7 +67,7 @@ async def process_message(event, say):
     user_input = event.get('text', '').strip()
 
     logging.info(f"Processing message from user {user_id} in channel {channel_id}, thread {thread_ts}")
-
+    
     async def send_response(user_input):
         if 'app_mention' in event['type']:
             user_input = re.sub(r"<@U[A-Z0-9]+>", "", user_input, count=1).strip()
@@ -78,6 +77,7 @@ async def process_message(event, say):
 
         combined_input = user_input
         files = event.get('files', [])
+        transcript_stored = False
 
         if files:
             for file_info in files:
@@ -86,90 +86,84 @@ async def process_message(event, say):
                 if file_url and (file_type == 'mp4' or file_type == 'm4a'):
                     result = await process_file(file_url, file_type)
                     if result:
-                        await bolt_app.client.files_upload(
-                            channels=channel_id,
-                            file=result,
-                            title="Transcription",
-                            filetype='text',
-                            filename='transcription.txt'
-                        )
                         transcript_response = await voiceflow.create_transcript(conversation_id)
                         if transcript_response:
-                            await prompt_for_title(conversation_id, say)
+                            # Use the message text as the title for the transcript
+                            title = user_input  # Using the message text as the title
+                            store_transcript(conversation_id, user_id, channel_id, thread_ts, title, transcript_response)
+                            transcript_stored = True
+                            # Send a thank you message with the title
+                            await say(text=f"Thank you for uploading your '{title}' transcript", thread_ts=thread_ts)
                         return
 
-        urls = re.findall(r'<http[s]?://[^>]+>', user_input)
-        for url in urls:
-            url = url[1:-1]
-            try:
-                webpage_text = extract_webpage_content(url)
-                if webpage_text:
-                    combined_input +="\n" + webpage_text
-            except Exception as e:
-                logging.error(f"Error reading URL {url}: {str(e)}")
-                combined_input +="\n[Note: A URL was not loaded properly and has been skipped.]"
+        if not transcript_stored:
+            urls = re.findall(r'<http[s]?://[^>]+>', user_input)
+            for url in urls:
+                url = url[1:-1]
+                try:
+                    webpage_text = extract_webpage_content(url)
+                    if webpage_text:
+                        combined_input +="\n" + webpage_text
+                except Exception as e:
+                    logging.error(f"Error reading URL {url}: {str(e)}")
+                    combined_input += "\n[A URL was not loaded properly and has been skipped.]"
 
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT button_payloads, transcript_created FROM conversations WHERE conversation_id = %s",
-                    (conversation_id,)
-                )
-                existing_conversation = cur.fetchone()
-
-                if existing_conversation:
-                    button_payloads, transcript_created = existing_conversation
-                    if not transcript_created:
-                        transcript_response = await voiceflow.create_transcript(conversation_id)
-                        logging.info(f"Transcript created: {transcript_response}")
-                        cur.execute(
-                            "UPDATE conversations SET transcript_created = TRUE WHERE conversation_id = %s",
-                            (conversation_id,)
-                        )
-
-                    voiceflow_task = asyncio.create_task(voiceflow.handle_user_input(conversation_id, combined_input))
-                    try:
-                        is_running, button_payloads = await asyncio.wait_for(asyncio.shield(voiceflow_task), timeout=5.0)
-                    except asyncio.TimeoutError:
-                        await say(text="Just a moment...", thread_ts=thread_ts)
-                    finally:
-                        is_running, button_payloads = await voiceflow_task
-
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
                     cur.execute(
-                        "UPDATE conversations SET button_payloads = %s WHERE conversation_id = %s",
-                        (Json(button_payloads), conversation_id)
+                        "SELECT button_payloads, transcript_created FROM conversations WHERE conversation_id = %s",
+                        (conversation_id,)
                     )
-                else:
-                    transcript_response = await voiceflow.create_transcript(conversation_id)
-                    logging.info(f"Transcript created: {transcript_response}")
+                    existing_conversation = cur.fetchone()
 
-                    voiceflow_task_launch = asyncio.create_task(voiceflow.handle_user_input(conversation_id, {'type': 'launch'}))
-                    try:
-                        is_running, button_payloads = await asyncio.wait_for(asyncio.shield(voiceflow_task_launch), timeout=5.0)
-                    except asyncio.TimeoutError:
-                        await say(text="Just a moment...", thread_ts=thread_ts)
-                    finally:
-                        is_running, button_payloads = await voiceflow_task_launch
+                    if existing_conversation:
+                        button_payloads, transcript_created = existing_conversation
+                        if not transcript_created:
+                            transcript_response = await voiceflow.create_transcript(conversation_id)
+                            logging.info(f"Transcript created: {transcript_response}")
+                            cur.execute(
+                                "UPDATE conversations SET transcript_created = TRUE WHERE conversation_id = %s",
+                                (conversation_id,)
+                            )
 
-                    if is_running:
-                        voiceflow_task_input = asyncio.create_task(voiceflow.handle_user_input(conversation_id, combined_input))
+                        voiceflow_task = asyncio.create_task(voiceflow.handle_user_input(conversation_id, combined_input))
                         try:
-                            is_running, button_payloads = await asyncio.wait_for(asyncio.shield(voiceflow_task_input), timeout=5.0)
+                            is_running, button_payloads = await asyncio.wait_for(asyncio.shield(voiceflow_task), timeout=5.0)
                         except asyncio.TimeoutError:
                             await say(text="Just a moment...", thread_ts=thread_ts)
                         finally:
-                            is_running, button_payloads = await voiceflow_task_input
+                            is_running, button_payloads = await voiceflow_task
 
-                    cur.execute(
-                        "INSERT INTO conversations (conversation_id, user_id, channel_id, thread_ts, button_payloads, transcript_created) VALUES (%s, %s, %s, %s, %s, TRUE)",
-                        (conversation_id, user_id, channel_id, thread_ts, Json(button_payloads))
-                    )
+                        cur.execute(
+                            "UPDATE conversations SET button_payloads = %s WHERE conversation_id = %s",
+                            (Json(button_payloads), conversation_id)
+                        )
+                    else:
+                        voiceflow_task_launch = asyncio.create_task(voiceflow.handle_user_input(conversation_id, {'type': 'launch'}))
+                        try:
+                            is_running, button_payloads = await asyncio.wait_for(asyncio.shield(voiceflow_task_launch), timeout=5.0)
+                        except asyncio.TimeoutError:
+                            await say(text="Just a moment...", thread_ts=thread_ts)
+                        finally:
+                            is_running, button_payloads = await voiceflow_task_launch
 
-        store_transcript(conversation_id, user_id, channel_id, thread_ts, None, combined_input)
+                        if is_running:
+                            voiceflow_task_input = asyncio.create_task(voiceflow.handle_user_input(conversation_id, combined_input))
+                            try:
+                                is_running, button_payloads = await asyncio.wait_for(asyncio.shield(voiceflow_task_input), timeout=5.0)
+                            except asyncio.TimeoutError:
+                                await say(text="Just a moment...", thread_ts=thread_ts)
+                            finally:
+                                is_running, button_payloads = await voiceflow_task_input
 
-        blocks, summary_text = create_message_blocks(voiceflow.get_responses(), button_payloads)
-        logging.info(f"Sending blocks: {blocks}, summary_text: {summary_text}, thread_ts: {thread_ts}")
-        await say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
+                        cur.execute(
+                            "INSERT INTO conversations (conversation_id, user_id, channel_id, thread_ts, button_payloads, transcript_created) VALUES (%s, %s, %s, %s, %s, TRUE)",
+                            (conversation_id, user_id, channel_id, thread_ts, Json(button_payloads))
+                        )
+
+            blocks, summary_text = create_message_blocks(voiceflow.get_responses(), button_payloads)
+            logging.info(f"Sending blocks: {blocks}, summary_text: {summary_text}, thread_ts: {thread_ts}")
+            await say(blocks=blocks, text=summary_text, thread_ts=thread_ts)
 
     try:
         await send_response(user_input)
@@ -187,7 +181,7 @@ async def handle_message_events(event, say):
     # Ignore messages from the bot itself to avoid loops
     if event.get('user') == bot_user_id:
         return
-
+    
     if event.get('channel_type') == 'im':
         await process_message(event, say)
     else:
@@ -200,23 +194,15 @@ async def handle_message_events(event, say):
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT transcript FROM transcripts WHERE conversation_id = %s AND title IS NULL",
-                    (f"{channel_id}-{thread_ts}",)
-                )
-                needs_title = cur.fetchone()
-
-                cur.execute(
                     "SELECT 1 FROM conversations WHERE conversation_id = %s",
                     (f"{channel_id}-{thread_ts}",)
                 )
                 conversation_exists = cur.fetchone()
 
-        if needs_title:
-            await handle_title_submission(event, say)
-        elif is_threaded and conversation_exists:
+        if is_threaded and conversation_exists:
+            # Process the message as part of the ongoing conversation
             await process_message(event, say)
-
-
+            
 @bolt_app.event("app_mention")
 async def handle_app_mention_events(event, say):
     event_id = hashlib.sha256(f"{event['user']}-{event['channel']}-{event['ts']}".encode()).hexdigest()

@@ -53,29 +53,6 @@ def get_transcript(title):
             result = cur.fetchone()
             return result[0] if result else None
 
-async def prompt_for_title(conversation_id, say):
-    prompt_message = "Please provide a title for the transcript."
-    await say(text=prompt_message, thread_ts=conversation_id.split('-')[-1])
-
-async def handle_title_submission(event, say):
-    conversation_id = f"{event['channel']}-{event['thread_ts']}"
-    title = event.get('text', '').strip()
-    user_id = event['user']
-
-    # Retrieve transcript data from the conversation to update with the title
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT transcript FROM transcripts WHERE conversation_id = %s",
-                (conversation_id,)
-            )
-            transcript = cur.fetchone()
-            if transcript:
-                store_transcript(conversation_id, user_id, event['channel'], event['thread_ts'], title, transcript[0])
-                await say(text=f"Thank you! I've saved the title '{title}' for your transcript.", thread_ts=event['thread_ts'])
-            else:
-                await say(text="No transcript found to update with title.", thread_ts=event['thread_ts'])
-
 def create_message_blocks(text_responses: List[str], button_payloads: Dict) -> (List[Dict], str):
     blocks = []
     summary_text = "Select an option:"
