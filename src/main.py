@@ -107,7 +107,7 @@ async def process_message(event, say):
                     combined_input +="\n" + webpage_text
             except Exception as e:
                 logging.error(f"Error reading URL {url}: {str(e)}")
-                combined_input +=[Note: A URL was not loaded properly and has been skipped.]"
+                combined_input +="\n[Note: A URL was not loaded properly and has been skipped.]"
 
         with get_db_connection() as conn:
             with conn.cursor() as cur:
