@@ -84,17 +84,13 @@ async def process_message(event, say):
                 file_url = file_info.get('url_private_download')
                 file_type = file_info.get('filetype')
                 if file_url and (file_type == 'mp4' or file_type == 'm4a'):
-                    result = await process_file(file_url, file_type)
-                    if result:
-                        transcript_response = await voiceflow.create_transcript(conversation_id)
-                        if transcript_response:
-                            # Use the message text as the title for the transcript
-                            title = user_input  # Using the message text as the title
-                            store_transcript(conversation_id, user_id, channel_id, thread_ts, title, transcript_response)
-                            transcript_stored = True
-                            # Send a thank you message with the title
-                            await say(text=f"Thank you for uploading your '{title}' transcript", thread_ts=thread_ts)
-                        return
+                    transcription_text = await process_file(file_url, file_type)
+                    if transcription_text:
+                        title = user_input  # Using the message text as the title
+                        store_transcript(conversation_id, user_id, channel_id, thread_ts, title, transcription_text)
+                        transcript_stored = True
+                        await say(text=f"Thank you for uploading your '{title}' transcript", thread_ts=thread_ts)
+                    return
 
         if not transcript_stored:
             urls = re.findall(r'<http[s]?://[^>]+>', user_input)

@@ -30,7 +30,7 @@ def get_db_connection(autocommit=True):
         conn.autocommit = True
     return conn
 
-def store_transcript(conversation_id, user_id, channel_id, thread_ts, title, transcript):
+def store_transcript(conversation_id, user_id, channel_id, thread_ts, title, transcript_text):
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -40,7 +40,7 @@ def store_transcript(conversation_id, user_id, channel_id, thread_ts, title, tra
                 ON CONFLICT (conversation_id)
                 DO UPDATE SET title = EXCLUDED.title, transcript = EXCLUDED.transcript, created_at = NOW();
                 """,
-                (conversation_id, user_id, channel_id, thread_ts, title, transcript)
+                (conversation_id, user_id, channel_id, thread_ts, title, transcript_text)
             )
 
 def get_transcript(title):
@@ -135,7 +135,8 @@ async def process_file(file_url, file_type):
                     logging.error("Failed to transcribe or no transcription returned")
                     return None
                 else:
-                    return create_text_file_in_memory(transcription)
+                    # Assuming transcription is the content of the text file
+                    return transcription
         elif file_type == 'pdf':
             return extract_text_from_pdf(file_content)
         elif file_type in ['doc', 'docx']:
