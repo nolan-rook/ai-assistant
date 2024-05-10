@@ -83,9 +83,9 @@ async def process_message(event, say):
             for file_info in files:
                 file_url = file_info.get('url_private_download')
                 file_type = file_info.get('filetype')
-                if file_url:
+                if file_url and (file_type == 'mp4' or file_type == 'm4a'):
                     result = await process_file(file_url, file_type)
-                    if result and (file_type == 'mp4' or file_type == 'm4a'):
+                    if result:
                         await bolt_app.client.files_upload(
                             channels=channel_id,
                             file=result,
@@ -93,10 +93,10 @@ async def process_message(event, say):
                             filetype='text',
                             filename='transcription.txt'
                         )
-                        await prompt_for_title(conversation_id, say)
+                        transcript_response = await voiceflow.create_transcript(conversation_id)
+                        if transcript_response:
+                            await prompt_for_title(conversation_id, say)
                         return
-                    elif result:
-                        combined_input += "\n" + result
 
         urls = re.findall(r'<http[s]?://[^>]+>', user_input)
         for url in urls:
@@ -104,10 +104,10 @@ async def process_message(event, say):
             try:
                 webpage_text = extract_webpage_content(url)
                 if webpage_text:
-                    combined_input += "\n" + webpage_text
+                    combined_input +=n" + webpage_text
             except Exception as e:
                 logging.error(f"Error reading URL {url}: {str(e)}")
-                combined_input += "\n[Note: A URL was not loaded properly and has been skipped.]"
+                combined_input +=[Note: A URL was not loaded properly and has been skipped.]"
 
         with get_db_connection() as conn:
             with conn.cursor() as cur:
@@ -176,7 +176,7 @@ async def process_message(event, say):
     except Exception as e:
         logging.error(f"Error processing message: {e}")
         await say(text="An error occurred while processing your request.", thread_ts=thread_ts)
-
+        
 @bolt_app.event("message")
 async def handle_message_events(event, say):
     event_id = hashlib.sha256(f"{event['user']}-{event['channel']}-{event['ts']}".encode()).hexdigest()

@@ -1,4 +1,3 @@
-# utils.py
 import psycopg2
 from psycopg2.extras import Json
 from typing import Optional, Dict, List
@@ -62,19 +61,20 @@ async def handle_title_submission(event, say):
     conversation_id = f"{event['channel']}-{event['thread_ts']}"
     title = event.get('text', '').strip()
     user_id = event['user']
-    await say(text=f"Thank you! I've saved the title '{title}' for your transcript.", thread_ts=event['thread_ts'])
 
     # Retrieve transcript data from the conversation to update with the title
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT user_id, channel_id, thread_ts, transcript FROM transcripts WHERE conversation_id = %s",
+                "SELECT transcript FROM transcripts WHERE conversation_id = %s",
                 (conversation_id,)
             )
-            result = cur.fetchone()
-            if result:
-                _, channel_id, thread_ts, transcript = result
-                store_transcript(conversation_id, user_id, channel_id, thread_ts, title, transcript)
+            transcript = cur.fetchone()
+            if transcript:
+                store_transcript(conversation_id, user_id, event['channel'], event['thread_ts'], title, transcript[0])
+                await say(text=f"Thank you! I've saved the title '{title}' for your transcript.", thread_ts=event['thread_ts'])
+            else:
+                await say(text="No transcript found to update with title.", thread_ts=event['thread_ts'])
 
 def create_message_blocks(text_responses: List[str], button_payloads: Dict) -> (List[Dict], str):
     blocks = []
