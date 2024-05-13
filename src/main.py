@@ -231,7 +231,7 @@ async def handle_voiceflow_button(ack, body, client, say, logger):
     button_index = int(action_id.split("_")[-1])
 
     # Connect to your database
-    with psycopg2.connect("dbname=test user=postgres") as conn:
+    with get_db_connection() as conn:
         with conn.cursor() as cur:
             # Fetch the current state of the conversation
             cur.execute("SELECT button_payloads FROM conversations WHERE conversation_id = %s", (conversation_id,))
