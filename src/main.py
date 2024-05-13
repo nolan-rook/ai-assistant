@@ -266,12 +266,24 @@ async def handle_voiceflow_button(ack, body, client, say, logger):
                         blocks, summary_text = create_message_blocks(voiceflow.get_responses(), new_button_payloads)
                         await client.chat_postMessage(channel=channel_id, blocks=blocks, text=summary_text, thread_ts=thread_ts)
                 else:
+                    # Update the message to remove the buttons even if the choice wasn't understood
+                    try:
+                        original_blocks = body['message'].get('blocks', [])
+                        updated_blocks = [block for block in original_blocks if block['type'] != 'actions']
+                        await client.chat_update(
+                            channel=channel_id,
+                            ts=message_ts,
+                            blocks=updated_blocks
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to update message: {e}")
+
                     # Respond in the correct thread if the choice wasn't understood
                     await client.chat_postMessage(channel=channel_id, text="Sorry, I didn't understand that choice.", thread_ts=thread_ts)
             else:
                 # Respond in the correct thread if no conversation was found
                 await client.chat_postMessage(channel=channel_id, text="Sorry, I couldn't find your conversation.", thread_ts=thread_ts)
-
+                
 async def notify_user_completion(conversation_id, document_id):
     with get_db_connection() as conn:
         with conn.cursor() as cur:
