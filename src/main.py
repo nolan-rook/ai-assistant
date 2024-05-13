@@ -215,61 +215,59 @@ async def handle_app_mention_events(event, say):
 
 @bolt_app.action(re.compile("voiceflow_button_"))
 async def handle_voiceflow_button(ack, body, client, say, logger):
-    await ack()  # Acknowledge the button press immediately
+    await ack()  # Acknowledge the action
 
-    # Extract necessary identifiers from the payload
+    # Immediate update to remove the buttons
+    channel_id = body['channel']['id']
+    message_ts = body['message']['ts']  # Timestamp of the original message
+    try:
+        original_blocks = body['message'].get('blocks', [])
+        updated_blocks = [block for block in original_blocks if block['type'] != 'actions']
+        await client.chat_update(
+            channel=channel_id,
+            ts=message_ts,
+            blocks=updated_blocks
+        )
+    except Exception as e:
+        logger.error(f"Failed to update message immediately to remove buttons: {e}")
+
     action_id = body['actions'][0]['action_id']
     user_id = body['user']['id']
-    channel_id = body['channel']['id']
-    message_ts = body['message']['ts']
-    thread_ts = body['message'].get('thread_ts', message_ts)
+    thread_ts = body['message'].get('thread_ts', body['message']['ts'])
+    conversation_id = f"{channel_id}-{thread_ts}"  # Create a unique conversation ID using user_id and thread_ts
+    button_index = int(action_id.split("_")[-1])  # Extract the index from the action_id
 
-    # Generate a unique conversation ID
-    conversation_id = f"{channel_id}-{thread_ts}"
-
-    # Extract the index from the action_id
-    button_index = int(action_id.split("_")[-1])
-
-    # Connect to your database
+    # Database interaction and Voiceflow processing
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            # Fetch the current state of the conversation
-            cur.execute("SELECT button_payloads FROM conversations WHERE conversation_id = %s", (conversation_id,))
+            cur.execute(
+                "SELECT button_payloads FROM conversations WHERE conversation_id = %s",
+                (conversation_id,)
+            )
             existing_conversation = cur.fetchone()
 
             if existing_conversation:
                 button_payloads = existing_conversation[0]
-                button_payload = button_payloads.get(str(button_index))
+                button_payload = button_payloads.get(str(button_index + 1))
 
                 if button_payload:
-                    # Process the button action
+                    # Process the button action to advance the conversation
                     is_running, new_button_payloads = await voiceflow.handle_user_input(conversation_id, button_payload)
+                    cur.execute(
+                        "UPDATE conversations SET button_payloads = %s WHERE conversation_id = %s",
+                        (Json(new_button_payloads), conversation_id)
+                    )
 
-                    # Update the conversation state in the database
-                    cur.execute("UPDATE conversations SET button_payloads = %s WHERE conversation_id = %s", (new_button_payloads, conversation_id))
-
-                    # Remove buttons from the original message
-                    await update_message_to_remove_buttons(client, channel_id, message_ts, body['message'].get('blocks', []), logger)
-
-                    # If the conversation is still running, send the next message
+                    # Send a new message reflecting the next stage in the conversation
                     if is_running:
                         blocks, summary_text = create_message_blocks(voiceflow.get_responses(), new_button_payloads)
                         await client.chat_postMessage(channel=channel_id, blocks=blocks, text=summary_text, thread_ts=thread_ts)
                 else:
-                    await handle_invalid_choice(client, channel_id, message_ts, body['message'].get('blocks', []), thread_ts, logger)
+                    # Respond in the correct thread if the choice wasn't understood
+                    await client.chat_postMessage(channel=channel_id, text="Sorry, I didn't understand that choice.", thread_ts=thread_ts)
             else:
+                # Respond in the correct thread if no conversation was found
                 await client.chat_postMessage(channel=channel_id, text="Sorry, I couldn't find your conversation.", thread_ts=thread_ts)
-
-async def update_message_to_remove_buttons(client, channel_id, message_ts, original_blocks, logger):
-    try:
-        updated_blocks = [block for block in original_blocks if block['type'] != 'actions']
-        await client.chat_update(channel=channel_id, ts=message_ts, blocks=updated_blocks)
-    except Exception as e:
-        logger.error(f"Failed to update message: {e}")
-
-async def handle_invalid_choice(client, channel_id, message_ts, original_blocks, thread_ts, logger):
-    await update_message_to_remove_buttons(client, channel_id, message_ts, original_blocks, logger)
-    await client.chat_postMessage(channel=channel_id, text="Sorry, I didn't understand that choice.", thread_ts=thread_ts)
                 
 async def notify_user_completion(conversation_id, document_id):
     with get_db_connection() as conn:
