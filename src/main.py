@@ -169,7 +169,7 @@ async def process_message(event, say):
         
 @bolt_app.event("message")
 async def handle_message_events(event, say):
-    event_id = hashlib.sha256(f"{event['user']}-{event['channel']}-{event['ts']}".encode()).hexdigest()
+    event_id = hashlib.sha256(f"{event['user']['id']}-{event['channel']}-{event['ts']}".encode()).hexdigest()
     if event_id in processed_events:
         return
 
@@ -201,7 +201,7 @@ async def handle_message_events(event, say):
             
 @bolt_app.event("app_mention")
 async def handle_app_mention_events(event, say):
-    event_id = hashlib.sha256(f"{event['user']}-{event['channel']}-{event['ts']}".encode()).hexdigest()
+    event_id = hashlib.sha256(f"{event['user']['id']}-{event['channel']}-{event['ts']}".encode()).hexdigest()
     if event_id in processed_events:
         return
 
