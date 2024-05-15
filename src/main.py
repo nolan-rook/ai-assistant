@@ -3,7 +3,7 @@ from slack_bolt.async_app import AsyncApp
 from slack_bolt.adapter.fastapi.async_handler import AsyncSlackRequestHandler
 
 from src.voiceflow_api import VoiceflowAPI
-from src.utils import store_transcript, process_file, create_message_blocks, extract_webpage_content, processed_events
+from src.utils import store_transcript, process_file, create_message_blocks, extract_webpage_content
 
 import re
 import os
@@ -19,9 +19,6 @@ from psycopg2.extras import Json
 
 from cachetools import TTLCache
 import hashlib
-
-# Initialize a cache with a time-to-live (TTL) of 60 seconds
-processed_events = TTLCache(maxsize=1000, ttl=60)
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.getLogger('slack_bolt.AsyncApp').setLevel(logging.ERROR)
@@ -169,11 +166,6 @@ async def process_message(event, say):
         
 @bolt_app.event("message")
 async def handle_message_events(event, say):
-    event_id = hashlib.sha256(f"{event['user']['id']}-{event['channel']}-{event['ts']}".encode()).hexdigest()
-    if event_id in processed_events:
-        return
-
-    processed_events[event_id] = True
     # Ignore messages from the bot itself to avoid loops
     if event.get('user') == bot_user_id:
         return
@@ -201,11 +193,6 @@ async def handle_message_events(event, say):
             
 @bolt_app.event("app_mention")
 async def handle_app_mention_events(event, say):
-    event_id = hashlib.sha256(f"{event['user']['id']}-{event['channel']}-{event['ts']}".encode()).hexdigest()
-    if event_id in processed_events:
-        return
-
-    processed_events[event_id] = True
     if event.get('user') == bot_user_id:
         return
 
