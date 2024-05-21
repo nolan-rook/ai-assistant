@@ -231,7 +231,7 @@ async def handle_voiceflow_button(ack, body, client, say, logger):
     try:
         await client.chat_postMessage(
             channel=channel_id,
-            text=f"Selected: {button_text}",
+            text=f"_Selected: {button_text}_",
             thread_ts=thread_ts
         )
     except Exception as e:
