@@ -223,6 +223,7 @@ async def handle_voiceflow_button(ack, body, client, say, logger):
     thread_ts = body['message'].get('thread_ts', body['message']['ts'])
     conversation_id = f"{channel_id}-{thread_ts}"  # Create a unique conversation ID using user_id and thread_ts
     button_index = int(action_id.split("_")[-1])  # Extract the index from the action_id
+    button_text = body['actions'][0]['text']['text']  # Extract the button text
 
     # Database interaction and Voiceflow processing
     with get_db_connection() as conn:
@@ -247,8 +248,10 @@ async def handle_voiceflow_button(ack, body, client, say, logger):
 
                     # Send a new message reflecting the next stage in the conversation
                     if is_running:
+                        # Include the button text in the response
+                        response_text = f"Selected: {button_text}"
                         blocks, summary_text = create_message_blocks(voiceflow.get_responses(), new_button_payloads)
-                        await client.chat_postMessage(channel=channel_id, blocks=blocks, text=summary_text, thread_ts=thread_ts)
+                        await client.chat_postMessage(channel=channel_id, text=response_text, blocks=blocks, thread_ts=thread_ts)
                 else:
                     # Respond in the correct thread if the choice wasn't understood
                     await client.chat_postMessage(channel=channel_id, text="Sorry, I didn't understand that choice.", thread_ts=thread_ts)
