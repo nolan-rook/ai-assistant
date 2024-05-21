@@ -213,7 +213,8 @@ async def handle_voiceflow_button(ack, body, client, say, logger):
         await client.chat_update(
             channel=channel_id,
             ts=message_ts,
-            blocks=updated_blocks
+            blocks=updated_blocks,
+            text="Button clicked"  # Add a generic text argument for accessibility
         )
     except Exception as e:
         logger.error(f"Failed to update message immediately to remove buttons: {e}")
@@ -224,6 +225,7 @@ async def handle_voiceflow_button(ack, body, client, say, logger):
     conversation_id = f"{channel_id}-{thread_ts}"  # Create a unique conversation ID using user_id and thread_ts
     button_index = int(action_id.split("_")[-1])  # Extract the index from the action_id
     button_text = body['actions'][0]['text']['text']  # Extract the button text
+    logging.info(f"button text: {button_text}")
 
     # Database interaction and Voiceflow processing
     with get_db_connection() as conn:
