@@ -227,6 +227,16 @@ async def handle_voiceflow_button(ack, body, client, say, logger):
     button_text = body['actions'][0]['text']['text']  # Extract the button text
     logging.info(f"button text: {button_text}")
 
+    # Post the selected button text immediately
+    try:
+        await client.chat_postMessage(
+            channel=channel_id,
+            text=f"Selected: {button_text}",
+            thread_ts=thread_ts
+        )
+    except Exception as e:
+        logger.error(f"Failed to post selected button text: {e}")
+
     # Database interaction and Voiceflow processing
     with get_db_connection() as conn:
         with conn.cursor() as cur:
@@ -250,10 +260,8 @@ async def handle_voiceflow_button(ack, body, client, say, logger):
 
                     # Send a new message reflecting the next stage in the conversation
                     if is_running:
-                        # Include the button text in the response
-                        response_text = f"Selected: {button_text}"
                         blocks, summary_text = create_message_blocks(voiceflow.get_responses(), new_button_payloads)
-                        await client.chat_postMessage(channel=channel_id, text=response_text, blocks=blocks, thread_ts=thread_ts)
+                        await client.chat_postMessage(channel=channel_id, text=summary_text, blocks=blocks, thread_ts=thread_ts)
                 else:
                     # Respond in the correct thread if the choice wasn't understood
                     await client.chat_postMessage(channel=channel_id, text="Sorry, I didn't understand that choice.", thread_ts=thread_ts)
