@@ -3,7 +3,7 @@ from slack_bolt.async_app import AsyncApp
 from slack_bolt.adapter.fastapi.async_handler import AsyncSlackRequestHandler
 
 from src.voiceflow_api import VoiceflowAPI
-from src.utils import store_transcript, process_file, create_message_blocks, extract_webpage_content
+from src.utils import store_transcript, process_file, create_message_blocks, extract_webpage_content, fetch_ai_news
 
 import re
 import os
@@ -19,6 +19,9 @@ from psycopg2.extras import Json
 
 from cachetools import TTLCache
 import hashlib
+
+from contextlib import asynccontextmanager
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.getLogger('slack_bolt.AsyncApp').setLevel(logging.ERROR)
@@ -348,3 +351,29 @@ async def fetch_transcript(title: str):
         return {"title": title, "transcript": transcript}
     else:
         return {"error": "Transcript not found"}, status.HTTP_404_NOT_FOUND
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Schedule the daily AI news task
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(send_daily_ai_news, 'cron', hour=9, minute=0)  # Schedule to run daily at 9:00 AM
+    scheduler.start()
+    
+    yield
+    scheduler.shutdown()
+
+app.router.lifespan_context = lifespan
+
+async def send_daily_ai_news():
+    channel_id = "C06EF5ZTFHR"
+    ai_news = fetch_ai_news()
+    if ai_news:
+        blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": "*Daily AI News*"}}]
+        for news in ai_news:
+            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"*{news['title']}*\n{news['summary']}\n<{news['url']}|Read more>"}})
+            blocks.append({"type": "divider"})
+
+        try:
+            await bolt_app.client.chat_postMessage(channel=channel_id, blocks=blocks, text="Daily AI News")
+        except Exception as e:
+            logging.error(f"Error sending daily AI news: {e}")

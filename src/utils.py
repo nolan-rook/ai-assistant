@@ -231,3 +231,29 @@ def create_text_file_in_memory(content):
     text_stream = BytesIO(content.encode('utf-8'))
     text_stream.seek(0)
     return text_stream
+
+def fetch_ai_news():
+    url = "https://www.perplexity.ai/discover"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Referer': 'https://www.google.com/'
+    }
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.content, 'html.parser')
+        news_items = []
+        for item in soup.select('.discover-item'):
+            title = item.select_one('.discover-item-title').get_text(strip=True)
+            summary = item.select_one('.discover-item-summary').get_text(strip=True)
+            link = item.select_one('a')['href']
+            news_items.append({'title': title, 'summary': summary, 'url': link})
+        return news_items
+    except requests.HTTPError as http_err:
+        logging.error(f"HTTP error occurred while fetching AI news: {http_err}")
+        return []
+    except Exception as e:
+        logging.error(f"An error occurred while fetching AI news: {e}")
+        return []
