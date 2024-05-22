@@ -13,6 +13,7 @@ import requests
 from cachetools import TTLCache
 from openai import AsyncOpenAI
 import tempfile
+from datetime import datetime, timedelta
 
 # Load environment variables
 from dotenv import load_dotenv
@@ -233,24 +234,29 @@ def create_text_file_in_memory(content):
     return text_stream
 
 def fetch_ai_news():
-    url = "https://www.perplexity.ai/discover"
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Referer': 'https://www.google.com/'
+    api_key = '87ba80fbe1284532bbf8b284e78cea7f'  # Replace with your News API key
+    url = "https://newsapi.org/v2/everything"
+    query = "artificial intelligence"
+    from_date = (datetime.now() - timedelta(days=1.1)).strftime('%Y-%m-%dT%H:%M:%SZ')
+    
+    params = {
+        'q': query,
+        'from': from_date,
+        'sortBy': 'publishedAt',
+        'apiKey': api_key
     }
+    
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, params=params)
         response.raise_for_status()
-        soup = BeautifulSoup(response.content, 'html.parser')
+        articles = response.json().get('articles', [])
         news_items = []
-        for item in soup.select('.discover-item'):
-            title = item.select_one('.discover-item-title').get_text(strip=True)
-            summary = item.select_one('.discover-item-summary').get_text(strip=True)
-            link = item.select_one('a')['href']
+        for article in articles:
+            title = article.get('title')
+            summary = article.get('description')
+            link = article.get('url')
             news_items.append({'title': title, 'summary': summary, 'url': link})
-        return news_items
+        return news_items[:3]
     except requests.HTTPError as http_err:
         logging.error(f"HTTP error occurred while fetching AI news: {http_err}")
         return []
