@@ -132,6 +132,9 @@ async def process_message(event, say):
                             (Json(button_payloads), conversation_id)
                         )
                     else:
+                        # Create a new transcript for new conversations
+                        transcript_response = await voiceflow.create_transcript(conversation_id)
+                        logging.info(f"Transcript created for new conversation: {transcript_response}")
                         voiceflow_task_launch = asyncio.create_task(voiceflow.handle_user_input(conversation_id, {'type': 'launch'}))
                         try:
                             is_running, button_payloads = await asyncio.wait_for(asyncio.shield(voiceflow_task_launch), timeout=5.0)
