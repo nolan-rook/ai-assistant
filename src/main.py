@@ -322,7 +322,7 @@ async def notify_user_start(conversation_id):
         channel_id, thread_ts = conversation_details
 
         # Construct the start notification message, tagging the user
-        start_message = "Thankyou, I will start working on it. I will notify you when I'm done. It will take around 10-15 minutes."
+        start_message = "Thankyou, I will start working on it. I will notify you when I'm done. It will take around 5 minutes."
 
         # Use the correct Bolt app instance to send the message
         try:
